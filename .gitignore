@@ -4,3 +4,6 @@ work/
 config.json
 *.log
 .DS_Store
+
+catalog-cache.json
+catalog-cache.json.tmp

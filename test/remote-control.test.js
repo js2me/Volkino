@@ -6,7 +6,7 @@ function boot(){
   const document={getElementById:element,activeElement:{tagName:'BUTTON',click(){clicks++;}},querySelectorAll(){return[];},addEventListener(type,fn){listeners[type]=fn;},createEvent(){return{initEvent(){}};}};
   const window={addEventListener(){}};
   function XHR(){}XHR.prototype.open=function(){};XHR.prototype.setRequestHeader=function(){};XHR.prototype.send=function(){};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../app/app.js'),'utf8'),{document,window,localStorage:{getItem(){return'[]';}},XMLHttpRequest:XHR,setTimeout,clearTimeout,console});
+  vm.runInNewContext(fs.readFileSync(require.resolve('../app/app.js'),'utf8'),{document,window,localStorage:{getItem(){return'[]';}},XMLHttpRequest:XHR,TWHistory:require('../app/history'),TWPlayback:require('../app/playback'),setTimeout,clearTimeout,console});
   function key(type,repeat){let prevented=false;listeners[type]({keyCode:13,repeat:!!repeat,preventDefault(){prevented=true;}});return prevented;}
   return{document,key,clicks:()=>clicks,submitted:()=>submitted,input(){document.activeElement={tagName:'INPUT',form:{dispatchEvent(){submitted++;}}};}};
 }

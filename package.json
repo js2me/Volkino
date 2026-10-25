@@ -1,6 +1,6 @@
 {
   "name": "torrenter-watcher",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "A remote-friendly webOS torrent search and TorrServer player",
   "scripts": {

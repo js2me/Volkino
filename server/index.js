@@ -1,7 +1,7 @@
 'use strict';
 // Node 8.12-compatible; no runtime dependencies. The TV runs this helper locally.
 var http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), URL = require('url'), crypto = require('crypto');
-var core = require('./core');
+var core = require('./core'),catalogModule=require('./catalog');
 var PORT = Number(process.env.PORT || 32190), HOST = process.env.HOST || '127.0.0.1';
 var APP = path.resolve(__dirname, '../app');
 if (!fs.existsSync(path.join(APP, 'index.html'))) APP = path.resolve(__dirname, '..');
@@ -11,6 +11,8 @@ var config = Object.assign({}, defaults);
 try { config = Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') console.error('Cannot load config:', e.message); }
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
 var token = crypto.randomBytes(24).toString('hex');
+var catalog=catalogModule.create({cacheFile:path.join(path.dirname(CONFIG),'catalog-cache.json'),fetchPage:function(endpoint){return request(catalogModule.origin,endpoint,null,null,14000).then(JSON.parse);}});
+var imageCache={},imageBytes=0;
 function request(base, endpoint, data, auth, timeout) {
   return new Promise(function (resolve, reject) {
     if (!base) return reject(new Error('Сначала укажите адрес TorrServer в настройках'));
@@ -82,6 +84,19 @@ function stream(req, res, q) {
   proxy.on('error', function (e) { if (!res.headersSent) json(res, 502, { error: e.message }); else res.destroy(); });
   res.on('close', function () { proxy.destroy(); }); proxy.end();
 }
+function sendPoster(req,res,p){
+  if(!/^\/t\/p\/w200\/[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(p||'')){json(res,400,{error:'Некорректный постер'});return;}
+  function send(data,type){res.writeHead(200,{'Content-Type':type,'Content-Length':data.length,'Cache-Control':'public, max-age=10800','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?undefined:data);}
+  if(imageCache[p]){imageCache[p].at=Date.now();send(imageCache[p].data,imageCache[p].type);return;}
+  var remote=http.get(catalogModule.origin+'/VilkaDB/?wimg='+encodeURIComponent('http://image.tmdb.org'+p),function(up){
+    var type=String(up.headers['content-type']||'').split(';')[0];
+    if(up.statusCode!==200||!/^image\/(jpeg|png|webp)$/.test(type)){up.resume();json(res,502,{error:'Постер недоступен'});return;}
+    var chunks=[],length=0,failed=false;up.on('data',function(c){length+=c.length;if(length>1024*1024){failed=true;remote.destroy();if(!res.headersSent)json(res,502,{error:'Постер слишком большой'});}else chunks.push(c);});
+    up.on('end',function(){if(failed)return;var data=Buffer.concat(chunks);while(imageBytes+data.length>6*1024*1024){var keys=Object.keys(imageCache).sort(function(a,b){return imageCache[a].at-imageCache[b].at;});if(!keys.length)break;imageBytes-=imageCache[keys[0]].data.length;delete imageCache[keys[0]];}if(imageCache[p])imageBytes-=imageCache[p].data.length;imageCache[p]={data:data,type:type,at:Date.now()};imageBytes+=data.length;send(data,type);});
+    up.on('error',function(){if(!res.headersSent)json(res,502,{error:'Постер недоступен'});});
+  });
+  remote.setTimeout(10000,function(){remote.destroy();if(!res.headersSent)json(res,504,{error:'Таймаут постера'});});remote.on('error',function(){if(!res.headersSent)json(res,502,{error:'Постер недоступен'});});
+}
 var server = http.createServer(function (req, res) {
   // Bind locally on TV. Reject DNS rebinding and cross-site state changes.
   var host = (req.headers.host || '').split(':')[0];
@@ -93,6 +108,9 @@ var server = http.createServer(function (req, res) {
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) { saveConfig(b); return publicConfig(); });
     if (route === '/api/health' && req.method === 'GET') return ts('/echo', null, 6000).then(function (v) { return { ok: true, version: v.trim(), url: config.torrserverUrl }; });
+    if (route === '/api/catalog/home' && req.method === 'GET') return catalog.home();
+    if (route === '/api/catalog/item' && req.method === 'GET') return catalog.item(String(q.key||''));
+    if (route === '/poster' && (req.method === 'GET'||req.method === 'HEAD')) {sendPoster(req,res,String(q.path||''));return null;}
     if (route === '/api/search' && req.method === 'GET') return search(String(q.q || ''));
     if (route === '/api/enable-search' && req.method === 'POST') return tsJSON('/settings', { action: 'get' }).then(function (s) { if (s.EnableRutorSearch) return { ok: true }; s.EnableRutorSearch = true; return ts('/settings', { action: 'set', sets: s }).then(function () { return { ok: true, message: 'Поиск включён. Первая загрузка индекса может занять несколько минут.' }; }); });
     if (route === '/api/torrents' && req.method === 'GET') return tsJSON('/torrents', { action: 'list' });
@@ -102,7 +120,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/stream' && ['GET','HEAD'].indexOf(req.method) >= 0) { stream(req, res, q); return null; }
     if (route.indexOf('/api/') === 0) { json(res, 404, { error: 'Метод не найден' }); return null; }
     if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { error: 'Метод не поддерживается' }); return null; }
-    var assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/icon.png': 'icon.png' };
+    var assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/history.js': 'history.js', '/playback.js': 'playback.js', '/style.css': 'style.css', '/icon.png': 'icon.png' };
     var file = assets[route]; if (!file) { json(res, 404, { error: 'Не найдено' }); return null; }
     var mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
     res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self'; frame-ancestors 'none'" });
