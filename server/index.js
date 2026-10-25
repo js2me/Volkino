@@ -108,6 +108,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) { saveConfig(b); return publicConfig(); });
     if (route === '/api/health' && req.method === 'GET') return ts('/echo', null, 6000).then(function (v) { return { ok: true, version: v.trim(), url: config.torrserverUrl }; });
+    if (route === '/api/catalog/browse' && req.method === 'GET') return catalog.browse(q);
     if (route === '/api/catalog/home' && req.method === 'GET') return catalog.home();
     if (route === '/api/catalog/item' && req.method === 'GET') return catalog.item(String(q.key||''));
     if (route === '/poster' && (req.method === 'GET'||req.method === 'HEAD')) {sendPoster(req,res,String(q.path||''));return null;}
@@ -128,5 +129,5 @@ var server = http.createServer(function (req, res) {
     return null;
   }).then(function (data) { if (data != null && !res.headersSent) json(res, 200, data); }).catch(function (e) { if (!res.headersSent) json(res, 400, { error: e.message }); });
 });
-server.listen(PORT, HOST, function () { console.log('Torrenter Watcher: http://' + HOST + ':' + PORT); });
+server.listen(PORT, HOST, function () { console.log('TorrMovie: http://' + HOST + ':' + PORT); });
 module.exports = server;
