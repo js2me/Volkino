@@ -1,0 +1,16 @@
+{
+  "name": "torrenter-watcher",
+  "version": "0.1.1",
+  "private": true,
+  "description": "A remote-friendly webOS torrent search and TorrServer player",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/package.mjs",
+    "check": "node --check server/index.js && node --check server/core.js && node --check app/app.js"
+  },
+  "engines": {
+    "node": ">=8.12"
+  },
+  "license": "MIT"
+}

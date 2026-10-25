@@ -1,0 +1,13 @@
+{
+  "id": "org.torrenter.watcher",
+  "version": "0.1.1",
+  "vendor": "Torrenter Watcher",
+  "type": "web",
+  "main": "launcher.html",
+  "title": "Torrenter Watcher",
+  "icon": "icon.png",
+  "largeIcon": "icon.png",
+  "resolution": "1920x1080",
+  "uiRevision": 2,
+  "disableBackHistoryAPI": true
+}

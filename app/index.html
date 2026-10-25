@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Torrenter Watcher</title><link rel="stylesheet" href="/style.css?v=0.1.1"><script defer src="/app.js?v=0.1.1"></script></head>
+<body>
+<div id="shell">
+  <aside><div class="brand"><span class="brand-mark">▶</span><strong>TORRENTER<span>WATCHER</span></strong></div><div class="nav-label">БИБЛИОТЕКА</div><nav><button id="nav-search" data-view="search" class="nav active">⌕ <span>Поиск</span></button><button data-view="history" class="nav">◷ <span>Продолжить</span></button><button data-view="torrents" class="nav">▤ <span>На сервере</span></button><button data-view="magnet" class="nav">↗ <span>Открыть ссылку</span></button></nav><div class="sidebar-bottom"><button data-view="settings" class="nav">⚙ <span>Настройки</span></button><div class="connection"><i id="connection-light"></i><span id="connection-text">Проверяем сервер</span></div><div class="version">webOS · v0.1.1</div></div></aside>
+  <main id="main"><div class="eyebrow">ТВОЙ ЭКРАН. ТВОЙ ВЫБОР.</div><h1 id="page-title">Что посмотрим?</h1><div id="content"></div></main>
+  <footer><span><kbd>↑ ↓ ← →</kbd> Навигация</span><span><kbd>OK</kbd> Выбрать</span><span><kbd>BACK</kbd> Назад</span><span class="footer-right">Поиск → Раздача → Просмотр</span></footer>
+</div>
+<div id="player" class="hidden"><video id="video" playsinline></video><div id="player-top"><span class="eyebrow">СЕЙЧАС НА ЭКРАНЕ</span><h2 id="playing-title"></h2><p id="playing-status"></p><button id="player-back" class="btn">Назад к файлам</button></div><div id="player-controls"><div id="player-timeline"><div id="player-progress"></div></div><div class="player-control-row"><span id="player-time">0:00 / 0:00</span><span>OK — пауза · ← → — 30 сек · ↑ ↓ — 5 мин · Жёлтая — аудио · BACK — выйти</span></div></div></div>
+<div id="toast" role="status" class="hidden"></div>
+</body></html>

@@ -1,0 +1,8 @@
+{
+  "torrserverUrl": "http://YOUR_SERVER_IP:8090",
+  "torrserverUsername": "",
+  "torrserverPassword": "",
+  "searchProvider": "vilkadb",
+  "jacredUrl": "",
+  "jacredApiKey": ""
+}
