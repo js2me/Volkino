@@ -32,7 +32,18 @@ test('search, add, files, byte-range stream, secrets and API session work throug
     assert.equal((await fetch(base+'/api/config')).status,403);
     const token=(await (await fetch(base+'/api/session')).json()).token;
     async function api(route,data){const r=await fetch(base+'/api/'+route,{method:data?'POST':'GET',headers:{'X-App-Token':token,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const j=await r.json();assert.equal(r.status,200,JSON.stringify(j));return j;}
-    const conf=await api('config');assert.equal(conf.hasPassword,true);assert.equal(conf.torrserverPassword,undefined);
+    const conf=await api('config');assert.equal(conf.hasPassword,true);assert.equal(conf.torrserverPassword,undefined);assert.equal(conf.audioFix,'off');
+    assert.equal(conf.seekStep,30);
+    for(const seekStep of [1,3600,15])assert.equal((await api('config',{seekStep})).seekStep,seekStep);
+    for(const seekStep of [0,-1,3601,1.5,'30',true,null]){
+      const invalid=await fetch(base+'/api/config',{method:'POST',headers:{'X-App-Token':token,'Content-Type':'application/json'},body:JSON.stringify({seekStep})});
+      assert.equal(invalid.status,400);assert.equal((await api('config')).seekStep,15);
+    }
+    for(const audioFix of ['moderate','night','off','night'])assert.equal((await api('config',{audioFix})).audioFix,audioFix);
+    for(const audioFix of ['invalid',true,7]){
+      const invalid=await fetch(base+'/api/config',{method:'POST',headers:{'X-App-Token':token,'Content-Type':'application/json'},body:JSON.stringify({audioFix})});
+      assert.equal(invalid.status,400);assert.equal((await api('config')).audioFix,'night');
+    }
     assert.equal((await api('health')).version,'MatriX.test');
     assert.equal((await api('search?q=Test')).results[0].seeders,5);
     assert.equal((await api('add',{link:'magnet:?xt=urn:btih:'+hash})).hash,hash);
@@ -40,7 +51,7 @@ test('search, add, files, byte-range stream, secrets and API session work throug
     assert.equal((await api('preload',{hash,index:2})).stat,3);
     const stream=await fetch(base+'/stream?hash='+hash+'&index=2',{headers:{Range:'bytes=10-13'}});assert.equal(stream.status,206);assert.equal(stream.headers.get('content-range'),'bytes 10-13/100');assert.equal(await stream.text(),'DATA');assert.equal(seenRange,'bytes=10-13');assert.equal(seenAuth,'Basic '+Buffer.from('test:private-password').toString('base64'));
     settings.EnableRutorSearch=false;await api('enable-search',{});assert.equal(settings.EnableRutorSearch,true);assert.equal(settings.CacheSize,123456);
-    await api('config',{torrserverUsername:'another'});const saved=JSON.parse(fs.readFileSync(cfg));assert.equal(saved.torrserverPassword,'private-password');assert.equal(fs.statSync(cfg).mode&0o777,0o600);
+    await api('config',{torrserverUsername:'another'});const saved=JSON.parse(fs.readFileSync(cfg));assert.equal(saved.torrserverPassword,'private-password');assert.equal(saved.audioFix,'night');assert.equal(saved.seekStep,15);assert.equal(fs.statSync(cfg).mode&0o777,0o600);
     assert.equal((await fetch(base+'/server/index.js')).status,404);
     const rebound=await new Promise((resolve,reject)=>{http.get(base+'/api/session',{headers:{Host:'evil.example'}},res=>{res.resume();resolve(res.statusCode);}).on('error',reject);});assert.equal(rebound,403);
   }finally{child.kill();await events.once(child,'exit');upstream.closeAllConnections();await new Promise(r=>upstream.close(r));fs.rmSync(dir,{recursive:true});}

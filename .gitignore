@@ -10,3 +10,9 @@ catalog-cache.json.tmp
 
 # Locally installed TorrServer and its databases
 torrserver/
+
+# Generated browser bundle and browser test artifacts
+app/catalog.js
+app/catalog.css
+test-results/
+playwright-report/

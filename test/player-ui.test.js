@@ -94,3 +94,14 @@ test('Filmix selectors filter seasons and voices while keeping progress shared a
  const voice=h.document.getElementById('filmix-voice');voice.value='Original';voice.onchange();assert.equal(h.state.files.length,1);assert.equal(h.state.files[0].voice,'Original');assert.equal(h.elements.content.querySelector('.file-watch-fill').style.width,'50%');
  const season=h.document.getElementById('filmix-season');season.value='2';season.onchange();assert.equal(h.state.files[0].id,20001);assert.equal(h.state.filmixVoice,'Dub');
 });
+
+
+test('player arrows and media keys use the configured seek step, defaulting to 30 seconds',()=>{
+  for(const [setting,step] of [[undefined,30],[10,10],[75,75],[0,30]]){
+    for(const [key,direction] of [[37,-1],[39,1],[412,-1],[417,1]]){
+      const h=boot();h.state.config.seekStep=setting;h.play();h.key(key);
+      assert.equal(h.seekControl.target(),100+direction*step);
+      h.advance(250);assert.equal(h.video.currentTime,100+direction*step);
+    }
+  }
+});

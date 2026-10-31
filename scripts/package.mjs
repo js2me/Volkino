@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 const root = path.resolve(import.meta.dirname || path.dirname(new URL(import.meta.url).pathname), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
 const id = JSON.parse(fs.readFileSync(path.join(root, 'app/appinfo.json'))).id;
@@ -10,6 +11,15 @@ function destMake() { fs.mkdirSync(dest, { recursive: true }); return dest; }
 const app = path.join(staging, 'data/usr/palm/applications', id);
 fs.mkdirSync(app, { recursive: true });
 fs.cpSync(path.join(root, 'app'), app, { recursive: true });
+// webOS keeps launcher images cached by path across application updates.
+const appInfo = JSON.parse(fs.readFileSync(path.join(app, 'appinfo.json')));
+for (const key of ['icon', 'largeIcon']) {
+  const data = fs.readFileSync(path.join(app, appInfo[key]));
+  const name = `volkino-${key}-${createHash('sha256').update(data).digest('hex').slice(0, 12)}.png`;
+  fs.writeFileSync(path.join(app, name), data);
+  appInfo[key] = name;
+}
+fs.writeFileSync(path.join(app, 'appinfo.json'), JSON.stringify(appInfo, null, 2));
 fs.cpSync(path.join(root, 'server'), path.join(app, 'server'), { recursive: true });
 fs.mkdirSync(path.join(app, 'scripts'));
 fs.copyFileSync(path.join(root, 'scripts/start-tv.sh'), path.join(app, 'scripts/start-tv.sh'));

@@ -6,11 +6,30 @@
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test test/*.test.js",
-    "build": "node scripts/package.mjs",
-    "check": "node --check server/index.js && node --check server/core.js && node --check server/filmix.js && node --check server/local-torrserver.js && node --check app/app.js"
+    "build": "npm run build:ui && node scripts/package.mjs",
+    "check": "node --check server/index.js && node --check server/core.js && node --check server/filmix.js && node --check server/filmix-web.js && node --check server/local-torrserver.js && node --check app/app.js && tsc --noEmit",
+    "prestart": "npm run build:ui",
+    "build:ui": "vite build",
+    "test:ui": "npm run build:ui && playwright test",
+    "dev": "vite",
+    "dev:mock": "vite"
   },
   "engines": {
     "node": ">=8.12"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "core-js": "^3.51.0",
+    "mobx": "^6.16.1",
+    "mobx-solid": "^0.3.1",
+    "mobx-view-model": "^11.0.1",
+    "mobx-view-model-solid": "^0.0.3",
+    "solid-js": "^1.9.18"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vite-plugin-solid": "^2.11.15"
+  }
 }

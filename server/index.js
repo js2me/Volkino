@@ -6,9 +6,12 @@ var PORT = Number(process.env.PORT || 32190), HOST = process.env.HOST || '127.0.
 var APP = path.resolve(__dirname, '../app');
 if (!fs.existsSync(path.join(APP, 'index.html'))) APP = path.resolve(__dirname, '..');
 var CONFIG = process.env.TW_CONFIG || path.resolve(__dirname, '../config.json');
-var defaults = { torrserverMode: 'external', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
-var config = Object.assign({}, defaults);
+var defaults = { seekStep: 30, audioFix: 'off', torrserverMode: 'external', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
+Object.assign(defaults,{filmixTransport:'mobile',filmixWebHash:'',filmixWebAccessToken:'',filmixWebRefreshToken:'',filmixWebUserAgent:''});
+var config=Object.assign({},defaults);
 try { config = Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') console.error('Cannot load config:', e.message); }
+if (!validSeekStep(config.seekStep)) config.seekStep=30;
+if (['off','moderate','night'].indexOf(config.audioFix)<0) config.audioFix='off';
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
 var localTS = require('./local-torrserver').create({directory: path.dirname(CONFIG), port: process.env.TW_TORRSERVER_PORT});
 function tsBase() { return config.torrserverMode === 'local' ? localTS.base : config.torrserverUrl; }
@@ -46,10 +49,19 @@ function body(req) {
     req.on('end', function () { try { resolve(JSON.parse(data || '{}')); } catch (_) { reject(new Error('Некорректный JSON')); } }); req.on('error', reject);
   });
 }
-function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; delete out.filmixToken; delete out.filmixDeviceId; out.hasFilmixToken=!!config.filmixToken; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
+function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; delete out.filmixToken; delete out.filmixDeviceId; delete out.filmixWebHash; delete out.filmixWebAccessToken; delete out.filmixWebRefreshToken; out.hasFilmixToken=config.filmixTransport==='web'?!!config.filmixWebAccessToken:!!config.filmixToken; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
+function validSeekStep(value) { return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= 1 && value <= 3600; }
 function validateConfig(data) {
   var next = Object.assign({}, config);
-  ['torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','jacredUrl','jacredApiKey','filmixApiUrl','filmixSiteUrl','filmixToken','filmixDeviceId'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  if (data.seekStep !== undefined) {
+    if (!validSeekStep(data.seekStep)) throw new Error('Шаг перемотки должен быть целым числом от 1 до 3600 секунд');
+    next.seekStep = data.seekStep;
+  }
+  ['audioFix','torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','jacredUrl','jacredApiKey','filmixApiUrl','filmixSiteUrl','filmixToken','filmixDeviceId'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  ['filmixTransport','filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken','filmixWebUserAgent'].forEach(function(key){if(typeof data[key]==='string')next[key]=data[key].trim();});
+  if(['web','mobile'].indexOf(next.filmixTransport)<0)throw new Error('Неизвестный способ подключения Filmix');
+  ['filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken','filmixWebUserAgent'].forEach(function(key){if(next[key].length>16384||/[\r\n]/.test(next[key]))throw new Error('Некорректная сессия Filmix TV');});
+  if ((data.audioFix!==undefined&&typeof data.audioFix!=='string')||['off','moderate','night'].indexOf(next.audioFix)<0) throw new Error('Неизвестный режим автофикса звука');
   if (['external', 'local'].indexOf(next.torrserverMode) < 0) throw new Error('Неизвестный режим TorrServer');
   next.torrserverUrl = core.validBase(next.torrserverUrl, true); next.jacredUrl = core.validBase(next.jacredUrl, true);
   next.filmixApiUrl=core.validBase(next.filmixApiUrl||filmixModule.defaultApi); next.filmixSiteUrl=core.validBase(next.filmixSiteUrl||filmixModule.defaultSite);
@@ -114,7 +126,7 @@ var server = http.createServer(function (req, res) {
   if (HOST === '127.0.0.1' && ['127.0.0.1','localhost'].indexOf(host) < 0) return json(res, 403, { error: 'Недопустимый Host' });
   var parsed = URL.parse(req.url, true), route = parsed.pathname, q = parsed.query;
   if (route === '/api/session' && req.method === 'GET') return json(res, 200, { token: token });
-  if (route.indexOf('/api/') === 0 && req.headers['x-app-token'] !== token) return json(res, 403, { error: 'Обновите приложение' });
+  if (route.indexOf('/api/') === 0 && req.headers['x-app-token'] !== token) return json(res, 403, { code: 'SESSION_EXPIRED', error: 'Сессия устарела. Откройте приложение заново.' });
   Promise.resolve().then(function () {
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) {
@@ -131,10 +143,17 @@ var server = http.createServer(function (req, res) {
       return localTS.stop().then(function () { saveConfig({torrserverMode: 'external'}); return localTS.status(); });
     }
     if (route === '/api/filmix/search' && req.method === 'GET') return filmix.search(q.q);
+    if (route === '/api/latest' && req.method === 'GET') {
+      if(q.source&&q.source!=='filmix')throw new Error('Последние добавления доступны только для Filmix');
+      return filmix.latest(q.page,q.refresh==='1');
+    }
     if (route === '/api/filmix/post' && req.method === 'GET') return filmix.post(q.id);
+    if (route === '/api/filmix/details' && req.method === 'GET') return filmix.details(q.id);
+    if (route === '/filmix-poster' && (req.method === 'GET'||req.method === 'HEAD')) {filmix.poster(req,res,q.id);return null;}
     if (route === '/api/filmix/play' && req.method === 'POST') return body(req).then(function(b){return filmix.grant({id:b.id,fileId:b.fileId,voice:String(b.voice||''),quality:b.quality});});
     if (route === '/api/filmix/profile' && req.method === 'GET') return filmix.profile(true);
     if (route === '/api/filmix/auth/start' && req.method === 'POST') return filmix.authStart();
+    if (route === '/api/filmix/auth/login' && req.method === 'POST') return body(req).then(function(b){return filmix.login(b.name,b.password);});
     if (route === '/api/filmix/auth/check' && req.method === 'POST') return filmix.authCheck();
     if (route === '/api/filmix/auth/disconnect' && req.method === 'POST') return filmix.disconnect();
     if (route.indexOf('/filmix-stream/')===0 && ['GET','HEAD'].indexOf(req.method)>=0) { filmix.stream(req,res,route.slice('/filmix-stream/'.length)); return null; }
@@ -152,7 +171,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/stream' && ['GET','HEAD'].indexOf(req.method) >= 0) { stream(req, res, q); return null; }
     if (route.indexOf('/api/') === 0) { json(res, 404, { error: 'Метод не найден' }); return null; }
     if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { error: 'Метод не поддерживается' }); return null; }
-    var assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/history.js': 'history.js', '/playback.js': 'playback.js', '/style.css': 'style.css', '/icon.png': 'icon.png', '/wolf.png': 'wolf.png' };
+    var assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/catalog.js': 'catalog.js', '/history.js': 'history.js', '/playback.js': 'playback.js', '/catalog.css': 'catalog.css', '/icon.png': 'icon.png', '/wolf.png': 'wolf.png' };
     var file = assets[route]; if (!file) { json(res, 404, { error: 'Не найдено' }); return null; }
     var mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
     res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self'; frame-ancestors 'none'" });

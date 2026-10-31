@@ -1,0 +1,20 @@
+/* Navy, teal and ice tones from the VolKino wolf-and-moon logo. */
+:root {
+  --color-bg: #030e23;
+  --color-sidebar: #041329;
+  --color-surface: #081e36;
+  --color-surface-raised: #0c2b46;
+  --color-surface-active: #0a3548;
+  --color-glow: #073449;
+  --color-border: #16435b;
+  --color-border-strong: #28617a;
+  --color-accent: #63e8ef;
+  --color-accent-bright: #a1f5fb;
+  --color-text: #ecfbff;
+  --color-text-secondary: #a1c4d7;
+  --color-text-muted: #779fb5;
+  --color-ink: #031a2b;
+  --color-focus-ring: rgba(99, 232, 239, .2);
+  --color-error: #ffb4a5;
+  --color-warning: #ddac54;
+}

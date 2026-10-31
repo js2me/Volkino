@@ -16,6 +16,12 @@ child.stdout.on('data', function(c) {
   if (/"statusValue"\s*:\s*30/.test(buffer)) {
     done=true;clearTimeout(timeout);child.kill();
     try {
+      var appDir='/media/developer/apps/usr/palm/applications/org.torrenter.watcher';
+      var info=JSON.parse(fs.readFileSync(appDir+'/appinfo.json','utf8'));
+      // Refresh the existing Home tile after a rename without changing its position.
+      cp.execFileSync('/usr/bin/luna-send',['-n','1','luna://com.webos.service.applicationmanager/updateLaunchPoint',JSON.stringify({
+        launchPointId:info.id+'_default',title:info.title,icon:appDir+'/'+info.icon,largeIcon:appDir+'/'+info.largeIcon
+      })]);
       var base='/var/lib/torrenter-watcher';
       if(!fs.existsSync(base))fs.mkdirSync(base,448);
       if(ts) {

@@ -1,0 +1,6 @@
+Tool: OpenAI ImageGen (built-in), edit mode.
+Input: brand-reference.jpg
+Output: logo.png
+Transparent background: false
+
+Edit target: supplied VOLKINO brand image. Make a precise square crop of ONLY the central emblem: howling teal/navy/ice-white wolf sitting in front of the luminous icy moon with curved filmstrip and cyan outlined screen behind it. Remove ALL text by excluding the top title and Russian tagline from the crop. Crop roughly the region x=405..980, y=245..700 of the original 1408x768, then frame this emblem in a square with very tight dark navy margins. Preserve the EXACT original wolf anatomy, silhouette, moon, filmstrip, screen rectangle, original drawn details, original cyan glow and navy colors. This is a cropping/framing task, not a redesign: do not invent, redraw, change the wolf, or add detail or lettering. The entire wolf from muzzle to paws and tail must fit. Background dark navy sampled from the existing immediate background. Output square high resolution logo asset with NO text.

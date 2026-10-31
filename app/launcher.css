@@ -1,0 +1,28 @@
+html, body { width: 100%; height: 100%; margin: 0; }
+body {
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 43%, #07354a 0%, #04172d 42%, #030e23 75%);
+  color: #ecfbff;
+  font-family: Arial, sans-serif;
+}
+.launch {
+  box-sizing: border-box;
+  width: 100%; height: 100%; padding: 5vh 8vw;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+.launch-logo {
+  display: block; width: 34vh; height: 34vh; max-width: 420px; max-height: 420px;
+  border-radius: 20%;
+  box-shadow: 0 0 80px rgba(0, 218, 255, .16);
+}
+h1 { margin: 3vh 0 0; font-size: 4.5vh; line-height: 1.2; letter-spacing: .08em; font-weight: 600; }
+#launch-status {
+  min-height: 2.8em; max-width: 65vw; margin: 2vh 0 0;
+  font-size: 2.1vh; line-height: 1.4; color: #a8c9d9;
+}
+#launch-retry {
+  margin-top: 2vh; padding: 16px 28px; border: 2px solid #62e7ff; border-radius: 12px;
+  background: #08334c; color: #ecfbff; font: inherit; font-size: 2.3vh;
+}
+#launch-retry:focus { outline: 3px solid #ecfbff; outline-offset: 5px; background: #0b526c; }

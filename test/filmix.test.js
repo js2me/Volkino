@@ -45,11 +45,11 @@ test('device auth, quality limits, secret-free metadata and byte-range streaming
 test('Filmix HTTP API requires session and keeps token out of public config while preserving it on unrelated saves',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tw-filmix-')),cfg=path.join(dir,'config.json');
  const reserve=http.createServer();const address=await listen(reserve);await close(reserve);const port=new URL(address).port;
- fs.writeFileSync(cfg,JSON.stringify({filmixToken:'private-token',torrserverMode:'local'}));
+ fs.writeFileSync(cfg,JSON.stringify({filmixToken:'private-token',filmixWebHash:'private-web-hash',filmixWebAccessToken:'private-web-access',filmixWebRefreshToken:'private-web-refresh',torrserverMode:'local'}));
  const child=spawn(process.execPath,['server/index.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,PORT:port,TW_CONFIG:cfg},stdio:['ignore','pipe','pipe']});
  try{await once(child.stdout,'data');assert.equal((await fetch(address+'/api/filmix/search?q=test')).status,403);const session=await(await fetch(address+'/api/session')).json();const headers={'X-App-Token':session.token,'Content-Type':'application/json'};
- const conf=await(await fetch(address+'/api/config',{headers})).json();assert.equal(conf.hasFilmixToken,true);assert.equal(conf.filmixToken,undefined);assert.equal(conf.filmixDeviceId,undefined);
- const saved=await fetch(address+'/api/config',{method:'POST',headers,body:JSON.stringify({filmixSiteUrl:'https://filmix.my'})});assert.equal(saved.status,200);assert.equal(JSON.parse(fs.readFileSync(cfg)).filmixToken,'private-token');assert.equal(fs.statSync(cfg).mode&0o777,0o600);
+ const conf=await(await fetch(address+'/api/config',{headers})).json();assert.equal(conf.hasFilmixToken,true);assert.equal(conf.filmixToken,undefined);assert.equal(conf.filmixDeviceId,undefined);for(const key of ['filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken'])assert.equal(conf[key],undefined);assert.equal(JSON.stringify(conf).includes('private-web'),false);
+ const saved=await fetch(address+'/api/config',{method:'POST',headers,body:JSON.stringify({filmixSiteUrl:'https://filmix.my'})});assert.equal(saved.status,200);assert.equal(JSON.parse(fs.readFileSync(cfg)).filmixToken,'private-token');assert.equal(JSON.parse(fs.readFileSync(cfg)).filmixWebAccessToken,'private-web-access');assert.equal(fs.statSync(cfg).mode&0o777,0o600);
  const disconnected=await fetch(address+'/api/filmix/auth/disconnect',{method:'POST',headers,body:'{}'});assert.equal(disconnected.status,200);assert.equal(JSON.parse(fs.readFileSync(cfg)).filmixToken,'');
  }finally{const exited=once(child,'exit');child.kill();await exited;fs.rmSync(dir,{recursive:true,force:true});}
 });

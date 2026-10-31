@@ -2,6 +2,7 @@
 // Filmix mobile API v2 adapter. Node 8 / webOS, no dependencies.
 var http=require('http'),https=require('https'),URL=require('url'),crypto=require('crypto'),dns=require('dns'),net=require('net');
 var DEFAULT_API='http://filmixapp.cyou/api/v2',DEFAULT_SITE='https://filmix.my';
+var recent=require('./recent');
 function number(value,name){var n=Number(value);if(!/^\d+$/.test(String(value))||!isFinite(n)||n<1||n>2147483647)throw new Error('Некорректный '+name);return n;}
 function mediaURL(value){var u=URL.parse(String(value||''));if(!/^https?:$/.test(u.protocol||'')||!u.hostname||u.auth||u.hash)throw new Error('Filmix вернул некорректную ссылку на видео');return u;}
 function publicAddress(address){
@@ -29,8 +30,8 @@ function normalizePost(post,cap){
   out.files.sort(function(a,b){return a.id-b.id;});out.seasons.sort(function(a,b){return a-b;});
   if(!out.files.length)throw new Error('Filmix: нет доступных видео для этого аккаунта. Проверьте доступ и подписку в настройках.');return out;
 }
-function create(options){
-  var grants={},pending=null,profileCache=null,lookup=options.lookup||publicLookup;
+function createMobile(options){
+  var grants={},pending=null,profileCache=null,lookup=options.lookup||publicLookup,latestCache={},latestPending={},detailsCache={};
   function config(){return options.getConfig();}
   function credentials(){var c=config();if(!c.filmixDeviceId){options.saveConfig({filmixDeviceId:crypto.randomBytes(8).toString('hex')});c=config();}return c;}
   function api(endpoint,extra,tokenOverride){
@@ -54,6 +55,55 @@ function create(options){
   function post(id){id=number(id,'ID Filmix');return profile().then(function(p){return api('post/'+id).then(function(r){return normalizePost(r,p.maxQuality);});});}
   function search(query){query=String(query||'').trim();if(query.length<2||query.length>160)return Promise.reject(new Error('Введите от 2 до 160 символов'));return api('search',{story:query}).then(function(r){if(!Array.isArray(r))throw new Error('Неизвестный формат поиска Filmix');return {results:r.slice(0,100).filter(function(e){return e&&/^\d+$/.test(String(e.id));}).map(function(e){return {id:Number(e.id),title:String(e.title||e.original_title||'Filmix').slice(0,500),originalTitle:String(e.original_title||'').slice(0,500),year:Number(e.year)||0};})};});}
   function publicPost(id){return post(id).then(function(r){return Object.assign({},r,{files:r.files.map(function(f){var out=Object.assign({},f);delete out.link;return out;})});});}
+  function metadata(value){
+    var id=number(value,'ID Filmix'),c=config(),key=(c.filmixApiUrl||DEFAULT_API)+'|'+(c.filmixToken||'')+'|'+id;
+    if(detailsCache[key]&&detailsCache[key].expires>Date.now())return detailsCache[key].promise;
+    function text(value){return String(value||'').replace(/<br\s*\/?\s*>/gi,'\n').replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ').replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&amp;/g,'&').trim().slice(0,12000);}
+    function list(value){return Array.isArray(value)?value.slice(0,20).map(text):[];}
+    function rating(value){var n=Number(value);return n>0&&n<=10?n.toFixed(1):'';}
+    var promise=api('post/'+id).then(function(r){
+      if(!r||Number(r.id)!==id)throw new Error('Filmix не вернул описание');
+      return {poster:String(r.poster||''),info:{id:id,title:text(r.title),originalTitle:text(r.original_title),
+        poster:r.poster?'/filmix-poster?id='+id:'',description:text(r.short_story),year:String(r.year||''),duration:Number(r.duration)||0,
+        genres:list(r.categories),countries:list(r.countries),actors:list(r.actors),directors:list(r.directors),imdbRating:rating(r.imdb_rating),kpRating:rating(r.kp_rating)}};
+    }).catch(function(error){delete detailsCache[key];throw error;});
+    detailsCache[key]={promise:promise,expires:Date.now()+300000};
+    Object.keys(detailsCache).slice(0,-64).forEach(function(k){delete detailsCache[k];});
+    return promise;
+  }
+  function details(id){return metadata(id).then(function(entry){return entry.info;});}
+  function poster(req,res,id){
+    function fail(){if(!res.headersSent){res.writeHead(502);res.end();}}
+    metadata(id).then(function(entry){
+      function load(address,redirects){
+      var u=mediaURL(address);
+      if(net.isIP(u.hostname)&&!publicAddress(u.hostname))throw new Error('Недопустимый адрес постера');
+      var remote=(u.protocol==='https:'?https:http).get(Object.assign({},u,{lookup:lookup}),function(up){
+        var type=String(up.headers['content-type']||'').split(';')[0],chunks=[],size=0;
+        if([301,302,303,307,308].indexOf(up.statusCode)>=0&&up.headers.location&&redirects>0){
+          up.resume();try{load(URL.resolve(address,up.headers.location),redirects-1);}catch(_){fail();}return;
+        }
+        if(up.statusCode!==200||!/^image\/(jpeg|png|webp)$/.test(type)){up.resume();return fail();}
+        up.on('data',function(chunk){size+=chunk.length;if(size>2*1024*1024){remote.destroy();fail();}else chunks.push(chunk);});
+        up.on('error',fail);up.on('aborted',fail);
+        up.on('end',function(){if(res.finished||size>2*1024*1024)return;var data=Buffer.concat(chunks);res.writeHead(200,{'Content-Type':type,'Content-Length':data.length,'Cache-Control':'public, max-age=10800','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?undefined:data);});
+      });
+      remote.setTimeout(8000,function(){remote.destroy();fail();});remote.on('error',fail);
+      res.on('close',function(){remote.destroy();});
+      }
+      load(entry.poster,3);
+    }).catch(fail);
+  }
+  function latest(value,refresh){
+    var page=recent.pageNumber(value),c=config(),key=(c.filmixApiUrl||DEFAULT_API)+'|'+(c.filmixToken||'')+'|'+page,old=latestCache[key];
+    if(!refresh&&old&&Date.now()-old.updatedAt<300000)return Promise.resolve(Object.assign({},old,{cached:true}));
+    if(latestPending[key])return latestPending[key];
+    latestPending[key]=api('catalog',{orderby:'date',orderdir:'desc',page:page}).then(function(data){
+      var result=recent.filmixPage(data,page);latestCache[key]=result;
+      Object.keys(latestCache).slice(0,-8).forEach(function(k){delete latestCache[k];});return result;
+    },function(error){if(old)return Object.assign({},old,{cached:true,stale:true});throw error;}).then(function(result){delete latestPending[key];return result;},function(error){delete latestPending[key];throw error;});
+    return latestPending[key];
+  }
   function resolve(spec){return post(spec.id).then(function(p){var file=p.files.filter(function(f){return f.id===Number(spec.fileId)&&f.voice===spec.voice;})[0];if(!file)throw new Error('Filmix: серия или озвучка недоступна');var quality=Number(spec.quality)||file.qualities[0];if(file.qualities.indexOf(quality)<0)throw new Error('Filmix: выбранное качество недоступно для этого аккаунта');var url=file.link.replace(/\[[\d,]+\]/,String(quality)).replace('%s',String(quality));mediaURL(url);return url;});}
   function grant(spec){return resolve(spec).then(function(url){var keys=Object.keys(grants);keys.forEach(function(k){if(grants[k].expires<Date.now())delete grants[k];});keys=Object.keys(grants);if(keys.length>=64)delete grants[keys[0]];var key=crypto.randomBytes(24).toString('hex');grants[key]={url:url,spec:spec,updated:Date.now(),expires:Date.now()+4*60*60*1000,identity:(config().filmixApiUrl||DEFAULT_API)+'|'+(config().filmixToken||'')};return {url:'/filmix-stream/'+key};});}
   function stream(req,res,key){
@@ -74,6 +124,18 @@ function create(options){
   function authStart(){return api('token_request',null,'').then(function(r){var code=String(r.user_code||''),secret=r.user_dev_token||r.code;if(!code||typeof secret!=='string'||!secret)throw new Error('Filmix не выдал код устройства');pending={code:code,token:secret,expires:Date.now()+15*60*1000,base:config().filmixApiUrl||DEFAULT_API};return {code:code,activationUrl:(config().filmixSiteUrl||DEFAULT_SITE)+'/consoles'};});}
   function authCheck(){if(!pending||pending.expires<Date.now()||pending.base!==(config().filmixApiUrl||DEFAULT_API))return Promise.reject(new Error('Сначала получите новый код устройства'));return profile(true,pending.token).then(function(p){options.saveConfig({filmixToken:pending.token});pending=null;profileCache=null;return p;});}
   function disconnect(){options.saveConfig({filmixToken:''});pending=null;profileCache=null;grants={};return {ok:true};}
-  return {search:search,post:publicPost,grant:grant,stream:stream,profile:profile,authStart:authStart,authCheck:authCheck,disconnect:disconnect};
+  return {latest:latest,details:details,poster:poster,search:search,post:publicPost,grant:grant,stream:stream,profile:profile,authStart:authStart,authCheck:authCheck,disconnect:disconnect};
 }
-module.exports={create:create,normalizePost:normalizePost,publicAddress:publicAddress,defaultApi:DEFAULT_API,defaultSite:DEFAULT_SITE};
+function create(options){
+  var mobile,web,facade={};
+  ['latest','details','poster','search','post','grant','stream','profile','authStart','authCheck','disconnect','login'].forEach(function(method){
+    facade[method]=function(){
+      var adapter;
+      if(options.getConfig().filmixTransport==='web')adapter=web||(web=require('./filmix-web').create(Object.assign({},options,{publicLookup:publicLookup,publicAddress:publicAddress})));
+      else adapter=mobile||(mobile=createMobile(options));
+      if(!adapter[method])throw new Error('Сначала выберите Filmix TV в настройках');
+      return adapter[method].apply(adapter,arguments);
+    };
+  });return facade;
+}
+module.exports={create:create,normalizePost:normalizePost,publicAddress:publicAddress,publicLookup:publicLookup,defaultApi:DEFAULT_API,defaultSite:DEFAULT_SITE};

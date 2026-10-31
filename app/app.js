@@ -3,24 +3,34 @@
   'use strict';
   var content = document.getElementById('content'), title = document.getElementById('page-title');
   var video = document.getElementById('video'), player = document.getElementById('player');
-  var state = { source:'torrent', filmix:null, filmixId:0, filmixVoice:'', filmixSeason:0, filmixQuality:0, filmixResults:[], filmixQuery:'', filmixOrigin:'search', view: 'search', token: '', config: {}, results: [], query: '', hash: '', torrent: null, files: [], timer: null, generation: 0, playing: null, overlayTimer: null, returnFocus: null, sort: 'seeders', resume: 0, playerTimer: null, playerDeadline: null, enterHeld: false, episodesOpen: false, episodeIndex: 0, episodeFiles: [], overlayVisible: false, homeData: null, homeScroll: 0, detailItem: null, lastHomeId: null, searchFromDetail: false, searchGeneration: 0, searchStatus: null, detailScroll: 0, detailTorrentIndex: 0, detailOrigin: 'home', catalogFilters: {type:'movie',genre:'',minRating:0,year:'',sort:'popular',page:1}, catalogGenres: {}, catalogData: null, catalogScroll: 0, catalogLastId: null, catalogAutofocus: false };
+  var state = { source:'torrent', filmix:null, filmixId:0, filmixVoice:'', filmixSeason:0, filmixQuality:0, filmixResults:[], filmixQuery:'', filmixOrigin:'search', view: 'search', token: '', config: {}, results: [], query: '', hash: '', torrent: null, files: [], timer: null, generation: 0, playing: null, overlayTimer: null, returnFocus: null, sort: 'seeders', resume: 0, playerTimer: null, playerDeadline: null, enterHeld: false, episodesOpen: false, episodeIndex: 0, episodeFiles: [], overlayVisible: false, homeData: null, homeScroll: 0, detailItem: null, lastHomeId: null, searchFromDetail: false, searchGeneration: 0, searchStatus: null, detailScroll: 0, detailTorrentIndex: 0, detailOrigin: 'home' };
+  var disposeCatalog = null, disposeLatest = null, disposeAudioSettings = null;
   var toastTimer, historyWarning=false, history = readHistory();
-  var seekControl=TWPlayback.create(video,{
-    onPreview:function(position){renderPosition(position);$('playing-status').textContent='Перемотка к '+time(position)+'…';showOverlay();},
-    onStart:function(position){$('playing-status').textContent='Перемотка к '+time(position)+(state.source==='filmix'?' · ждём данные Filmix…':' · ждём данные от TorrServer…');$('player-back').className='btn';showOverlay();},
-    onDone:function(){if(!state.playing)return;$('playing-status').textContent=video.paused?'Пауза':'';$('player-back').className='hidden';showOverlay();},
-    onError:function(message){if(!state.playing)return;$('playing-status').textContent=message;$('player-back').className='btn';showOverlay();}
-  });
+  var seekControl;
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function readHistory() { try { return TWHistory.load(localStorage); } catch (_) { return []; } }
   function storeHistory() { try { history=TWHistory.save(localStorage,history); } catch (_) { if(!historyWarning){historyWarning=true;toast('Не удалось сохранить историю на телевизоре: хранилище недоступно или заполнено');} } }
   function toast(message) { $('toast').textContent = message; $('toast').className = ''; clearTimeout(toastTimer); toastTimer = setTimeout(function () { $('toast').className = 'hidden'; }, 6500); }
-  function api(route, data, done) {
+  function api(route, data, done, renewed) {
     var xhr = new XMLHttpRequest(); xhr.open(data == null ? 'GET' : 'POST', '/api/' + route, true); xhr.timeout = route === 'preload' ? 50000 : route.indexOf('filmix/')===0?35000:25000;
     if (state.token) xhr.setRequestHeader('X-App-Token', state.token);
     if (data != null) xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = function () { var body; try { body = JSON.parse(xhr.responseText); } catch (_) { return done(new Error('Некорректный ответ сервера')); } if (xhr.status >= 400) return done(new Error(body.error || 'Ошибка HTTP ' + xhr.status)); done(null, body); };
+    xhr.onload = function () {
+      var body; try { body = JSON.parse(xhr.responseText); } catch (_) { return done(new Error('Некорректный ответ сервера')); }
+      // The helper rotates its token on restart while webOS may retain the page.
+      // A rejected request has not run yet, so it is safe to retry it once.
+      if (xhr.status === 403 && route !== 'session' && !renewed &&
+          (body.code === 'SESSION_EXPIRED' || body.error === 'Обновите приложение')) {
+        return api('session', null, function (error, session) {
+          if (error) return done(error);
+          state.token = session.token;
+          api(route, data, done, true);
+        });
+      }
+      if (xhr.status >= 400) return done(new Error(body.error || 'Ошибка HTTP ' + xhr.status));
+      done(null, body);
+    };
     xhr.onerror = function () { done(new Error('Нет соединения с локальным помощником. Перезапустите приложение.')); };
     xhr.ontimeout = function () { done(new Error('Сервер не ответил вовремя. Проверьте подключение.')); };
     xhr.send(data == null ? null : JSON.stringify(data));
@@ -31,45 +41,40 @@
   function focusFirst() { var e = content.querySelector('input,button,select'); if (e) e.focus(); }
   function message(heading, text, busy) { var d = el('div','empty'); var h = el('h2'); if (busy) h.appendChild(el('i','spinner')); h.appendChild(document.createTextNode(heading)); d.appendChild(h); d.appendChild(el('p','',text)); content.appendChild(d); return d; }
   function change(view) {
+    if(disposeLatest){disposeLatest();disposeLatest=null;}
+    if(disposeAudioSettings){disposeAudioSettings();disposeAudioSettings=null;}
+    if(window.TWNavigation)window.TWNavigation.close(false);
+    if(disposeCatalog){disposeCatalog();disposeCatalog=null;}
     clearTimeout(state.timer); state.generation++; state.view = view; content.innerHTML = ''; title.className=view==='files'?'file-page-title':'';
-    var navs = document.querySelectorAll('[data-view]'); for (var i=0;i<navs.length;i++) navs[i].className = 'nav' + (navs[i].getAttribute('data-view') === (view==='details'?state.detailOrigin:view) ? ' active' : '');
+    var menuView = view==='details' ? state.detailOrigin :
+      view==='filmix-search'||view==='files'&&state.source==='filmix' ?
+        (state.filmixOrigin==='latest'?'latest':state.filmixOrigin==='details'?state.detailOrigin:'search') : view;
+    var navs = document.querySelectorAll('[data-view]'); for (var i=0;i<navs.length;i++) navs[i].className = 'nav' + (navs[i].getAttribute('data-view') === menuView ? ' active' : '');
     $('main').scrollTop=0;
-    title.textContent = { catalog:'Каталог', home:'Что посмотрим сегодня?', details:'О фильме', search:'Что посмотрим?', history:'История просмотров', torrents:'Торренты на сервере', magnet:'Открыть торрент', settings:'Настройки', 'filmix-search':'Смотреть через Filmix', files:'Выберите файл' }[view] || 'VolKino';
-    if(view==='filmix-search')renderFilmixResults();else if (view === 'catalog') catalogView(); else if (view === 'home') homeView(); else if (view === 'search') searchView(); else if (view === 'settings') settingsView(); else if (view === 'magnet') magnetView(); else if (view === 'history') historyView(); else if (view === 'torrents') torrentsView();
+    title.textContent = { latest:'Последние добавления', catalog:'Каталог', home:'Что посмотрим сегодня?', details:'О фильме', search:'Что посмотрим?', history:'История просмотров', torrents:'Торренты на сервере', magnet:'Открыть торрент', settings:'Настройки', 'filmix-search':'Смотреть через Filmix', files:'Выберите файл' }[view] || 'VolKino';
+    if(view==='latest')latestView();else if(view==='filmix-search')renderFilmixResults();else if (view === 'catalog') catalogView(); else if (view === 'home') homeView(); else if (view === 'search') searchView(); else if (view === 'settings') settingsView(); else if (view === 'magnet') magnetView(); else if (view === 'history') historyView(); else if (view === 'torrents') torrentsView();
   }
   function posterImage(parent,src,name){
     var wrap=el('div','poster-art'),fallback=el('span','poster-fallback',String(name||'Кино').slice(0,1));wrap.appendChild(fallback);
     if(src){var img=el('img');img.alt='';img.src=src;img.setAttribute('loading','lazy');img.onerror=function(){img.style.display='none';};wrap.appendChild(img);}parent.appendChild(wrap);return wrap;
   }
-  function catalogCard(item,origin){
-    origin=origin||'home';
+  function catalogCard(item){
     var card=el('button','poster-card');card.setAttribute('data-catalog-id',item.id);card.setAttribute('aria-label',item.title+(item.year?' · '+item.year:''));
     var art=posterImage(card,item.poster,item.title);if(item.rating)art.appendChild(el('span','poster-rating',item.rating));
     card.appendChild(el('span','poster-name',item.title));card.appendChild(el('span','poster-meta',(item.year||'')+(item.type==='tv'?' · Сериал':' · Фильм')));
-    card.onclick=function(){state.detailOrigin=origin;if(origin==='catalog'){state.catalogScroll=$('main').scrollTop;state.catalogLastId=item.id;}else{state.homeScroll=$('main').scrollTop;state.lastHomeId=item.id;}openDetails(item);};return card;
+    card.onclick=function(){state.detailOrigin='home';state.homeScroll=$('main').scrollTop;state.lastHomeId=item.id;openDetails(item);};return card;
   }
-  function fillCatalogGenres(type,value){var select=$('catalog-genre');if(!select)return;select.innerHTML='';var all=el('option','','Все жанры');all.value='';select.appendChild(all);(state.catalogGenres[type]||[]).forEach(function(g){var o=el('option','',g.name);o.value=g.id;select.appendChild(o);});select.value=value||'';if(select.selectedIndex<0)select.value='';select.disabled=!(state.catalogGenres[type]||[]).length;}
   function catalogView(){
-    var bar=el('form','catalog-filters'),type=field(bar,'Тип','','select','catalog-type'),genre=field(bar,'Жанр','','select','catalog-genre'),rating=field(bar,'Рейтинг от','','select','catalog-rating'),year=field(bar,'Год','','select','catalog-year'),sort=field(bar,'Сортировка','','select','catalog-sort');
-    [['movie','Фильмы'],['tv','Сериалы']].forEach(function(p){var o=el('option','',p[1]);o.value=p[0];type.appendChild(o);});type.value=state.catalogFilters.type;
-    [[0,'Любой'],[5,'От 5'],[6,'От 6'],[7,'От 7'],[8,'От 8'],[9,'От 9']].forEach(function(p){var o=el('option','',p[1]);o.value=p[0];rating.appendChild(o);});rating.value=String(state.catalogFilters.minRating);
-    var anyYear=el('option','','Все годы');anyYear.value='';year.appendChild(anyYear);for(var y=new Date().getFullYear();y>=1900;y--){var yo=el('option','',String(y));yo.value=String(y);year.appendChild(yo);}year.value=state.catalogFilters.year;
-    [['popular','Популярное'],['newest','Новее'],['rating','По рейтингу']].forEach(function(p){var o=el('option','',p[1]);o.value=p[0];sort.appendChild(o);});sort.value=state.catalogFilters.sort;
-    var apply=button('Показать',null,'btn primary');apply.id='catalog-apply';apply.type='submit';bar.appendChild(apply);content.appendChild(bar);fillCatalogGenres(type.value,state.catalogFilters.genre);
-    type.onchange=function(){fillCatalogGenres(type.value,'');};
-    bar.onsubmit=function(e){e.preventDefault();state.catalogFilters={type:type.value,genre:genre.value,minRating:Number(rating.value),year:year.value,sort:sort.value,page:1};state.catalogData=null;state.catalogScroll=0;state.catalogLastId=null;loadCatalog(true);};
-    content.appendChild(el('p','muted','Выберите фильтры и нажмите «Показать». Сортировка применяется к текущей странице.'));var result=el('div');result.id='catalog-results';content.appendChild(result);
-    var d=state.catalogData,f=state.catalogFilters;if(d&&d.filters.type===f.type&&d.filters.genre===f.genre&&d.filters.minRating===f.minRating&&d.filters.year===f.year&&d.filters.sort===f.sort&&d.filters.page===f.page&&Date.now()-d.updatedAt<3600000){renderCatalogResults(d,!!state.catalogLastId);}else{type.focus();loadCatalog(state.catalogAutofocus);state.catalogAutofocus=false;}
+    disposeCatalog=window.TWCatalog.mount(content,{
+      api:api,
+      openItem:function(item){state.detailOrigin='catalog';openDetails(item);}
+    });
   }
-  function loadCatalog(focus){
-    var target=$('catalog-results'),f=state.catalogFilters,gen=++state.generation;target.innerHTML='';target.appendChild(el('p','muted','Загружаем каталог…'));
-    api('catalog/browse?type='+encodeURIComponent(f.type)+'&genre='+encodeURIComponent(f.genre)+'&minRating='+f.minRating+'&year='+encodeURIComponent(f.year)+'&sort='+encodeURIComponent(f.sort)+'&page='+f.page,null,function(err,data){if(gen!==state.generation||state.view!=='catalog')return;target.innerHTML='';if(err){target.appendChild(el('p','error-text',err.message));target.appendChild(button('Повторить',function(){loadCatalog(true);}));return;}state.catalogData=data;state.catalogGenres=data.genres;var genre=$('catalog-genre');fillCatalogGenres($('catalog-type').value,genre.disabled?state.catalogFilters.genre:genre.value);renderCatalogResults(data,focus);});
-  }
-  function catalogPageChange(page){state.catalogFilters=Object.assign({},state.catalogData.filters,{page:page});state.catalogData=null;state.catalogLastId=null;state.catalogScroll=0;state.catalogAutofocus=true;change('catalog');}
-  function catalogPagination(data){var pages=el('div','catalog-pagination');if(data.filters.page>1)pages.appendChild(button('← Предыдущая',function(){catalogPageChange(data.filters.page-1);}));pages.appendChild(el('span','muted','Страница '+data.filters.page));if(data.hasMore)pages.appendChild(button('Следующая →',function(){catalogPageChange(data.filters.page+1);}));return pages;}
-  function renderCatalogResults(data,focus){
-    var target=$('catalog-results');target.innerHTML='';var f=data.filters,genre=(data.genres[f.type]||[]).filter(function(g){return g.id===f.genre;})[0];target.appendChild(el('div','catalog-summary',(f.type==='tv'?'Сериалы':'Фильмы')+' · '+(genre?genre.name:'Все жанры')+' · '+(f.minRating?'рейтинг от '+f.minRating:'Любой рейтинг')+' · '+(f.year||'Все годы')+' · '+({popular:'Популярное',newest:'Новее',rating:'По рейтингу'}[f.sort])+' · '+data.items.length+' на странице'+(data.stale?' · сохранённая подборка':'')));target.appendChild(catalogPagination(data));if(!data.items.length)target.appendChild(el('p','muted','По этим фильтрам ничего не найдено. Попробуйте другой год, жанр или уменьшите рейтинг.'));
-    var grid=el('div','catalog-grid');data.items.forEach(function(item){grid.appendChild(catalogCard(item,'catalog'));});target.appendChild(grid);if(data.items.length)target.appendChild(catalogPagination(data));if(focus){var chosen=grid.querySelector('button');if(state.catalogLastId){var cards=grid.querySelectorAll('[data-catalog-id]');for(var i=0;i<cards.length;i++)if(cards[i].getAttribute('data-catalog-id')===state.catalogLastId)chosen=cards[i];}if(chosen){chosen.focus();if(state.catalogLastId)$('main').scrollTop=state.catalogScroll||0;}else{var b=target.querySelector('button');if(b)b.focus();}}
+  function latestView(){
+    disposeLatest=window.TWLatest.mount(content,{
+      api:api,
+      openFilmix:function(id,name){state.filmixOrigin='latest';state.searchFromDetail=false;openFilmix(id,name);}
+    });
   }
   function homeView(){
     if(state.homeData&&Date.now()-state.homeData.updatedAt<3*60*60*1000){renderHome();return;}
@@ -97,7 +102,7 @@
     if(!summaryOnly){var torrents=el('section','detail-torrents');torrents.appendChild(el('h2','','Раздачи'));var results=el('div');results.id='search-results';torrents.appendChild(results);content.appendChild(torrents);}if(!summaryOnly||focused){var b=body.querySelector('button');if(b)b.focus();}
   }
   function returnToResults(){
-    if(state.source==='filmix'){change('filmix-search');return;}
+    if(state.source==='filmix'){if(state.filmixOrigin==='latest'){state.source='torrent';change('latest');}else change('filmix-search');return;}
     if(!state.searchFromDetail||!state.detailItem){change('search');return;}
     change('details');renderDetails(state.detailItem,false);renderSearchState();var rows=$('search-results').querySelectorAll('.torrent');if(rows.length)rows[Math.min(state.detailTorrentIndex,rows.length-1)].focus();$('main').scrollTop=state.detailScroll;
   }
@@ -129,14 +134,15 @@
     var b=el('button','torrent');b.appendChild(el('span','torrent-number',number<10?'0'+number:String(number)));var body=el('span','torrent-body');body.appendChild(el('span','torrent-title',text));var m=el('span','torrent-meta');meta.forEach(function(x){m.appendChild(el('span',x.cls||'',x.text));});body.appendChild(m);b.appendChild(body);b.appendChild(el('span','torrent-arrow','→'));b.onclick=fn;return b;
   }
   function renderResults() {
-    var target=$('search-results');target.innerHTML='';var head=el('div','section-head');head.appendChild(el('h2','',state.results.length+' раздач'));var sort=el('select','input sort');[['seeders','Сначала больше сидов'],['size','Сначала меньше размер']].forEach(function(p){var o=el('option','',p[1]);o.value=p[0];sort.appendChild(o);});sort.value=state.sort;sort.setAttribute('aria-label','Сортировка');sort.onchange=function(){state.sort=sort.value;renderResults();var select=$('search-results').querySelector('select');if(select)select.focus();};head.appendChild(sort);target.appendChild(head);
+    var target=$('search-results');target.innerHTML='';var head=el('div','section-head');head.appendChild(el('h2','',state.results.length+' раздач'));var sort=el('select','input sort');sort.id='torrent-sort';[['seeders','Сначала больше сидов'],['size','Сначала меньше размер']].forEach(function(p){var o=el('option','',p[1]);o.value=p[0];sort.appendChild(o);});sort.value=state.sort;sort.setAttribute('aria-label','Сортировка');sort.onchange=function(){state.sort=sort.value;renderResults();var select=$('search-results').querySelector('select');if(select)select.focus();};head.appendChild(sort);target.appendChild(head);
     var list=state.results.slice();if(state.sort==='size')list.sort(function(a,b){return sizeNumber(a.size)-sizeNumber(b.size);});
     list.forEach(function(r,i){target.appendChild(row(i+1,r.title,[{text:bytes(r.size)},{text:'↑ '+r.seeders+' сидов',cls:'seed'},{text:r.tracker},{text:r.quality}],function(){if(state.view==='details'){state.detailScroll=$('main').scrollTop;state.detailTorrentIndex=i;}openTorrent(r.magnet,r.title);}));});
   }
   function sizeNumber(v){if(typeof v==='number')return v;var m=String(v).replace(',','.').match(/([\d.]+)\s*(TB|GB|MB|KB|ТБ|ГБ|МБ|КБ|ТиБ|ГиБ|МиБ|КиБ)/i);if(!m)return Number(v)||0;var u=m[2].toUpperCase(),p=/^(T|Т)/.test(u)?4:/^(G|Г)/.test(u)?3:/^(M|М)/.test(u)?2:1;return Number(m[1])*Math.pow(1024,p);}
   function field(parent,label,value,type,id){var d=el('div','field'),l=el('label','',label),input=el(type==='select'?'select':'input','input');input.id=id;l.htmlFor=id;if(type!=='select'){input.type=type||'text';input.value=value||'';input.autocomplete='off';}d.appendChild(l);d.appendChild(input);parent.appendChild(d);return input;}
   function settingsView(){
-    var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','muted','Выберите TorrServer на этом устройстве или подключите внешний сервер.'));
+    var p=el('div','panel');content.appendChild(p);if(window.TWAudio)disposeAudioSettings=window.TWAudio.mountSettings(p.appendChild(el('div')),state.config.audioFix||'off');p.appendChild(el('p','muted','Выберите TorrServer на этом устройстве или подключите внешний сервер.'));
+    var step=field(p,'Шаг перемотки плеера (секунды)',seekStep(),'number','seek-step');step.min='1';step.max='3600';step.step='1';
     var mode=field(p,'Где запускать TorrServer','','select','ts-mode');[['external','Внешний сервер'],['local','На этом устройстве']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];mode.appendChild(o);});mode.value=state.config.torrserverMode||'external';
     var local=el('div');p.appendChild(local);var status=el('p','muted','Проверяем локальный сервер…');status.id='local-server-status';local.appendChild(status);
     local.appendChild(button('Установить и запустить',function(){localServerAction('start');},'btn primary'));local.appendChild(button('Остановить',function(){localServerAction('stop');}));
@@ -152,6 +158,22 @@
   }
   function filmixSettings(parent){
     var section=el('section','filmix-settings');parent.appendChild(section);section.appendChild(el('h2','','Filmix — онлайн-просмотр'));
+    var transport=field(section,'Подключение Filmix','','select','filmix-transport');
+    [['web','Filmix TV — как в Media Station X'],['mobile','Мобильный API — прежнее подключение']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];transport.appendChild(o);});transport.value=state.config.filmixTransport||'mobile';
+    transport.onchange=function(){api('config',{filmixTransport:transport.value},function(error,r){if(error)return toast(error.message);state.config=r;change('settings');});};
+    if(state.config.filmixTransport==='web'){
+      section.appendChild(el('p','muted','Вход в Filmix TV. Пароль используется только для входа; настройки сохраняют сессию устройства.'));
+      var login=field(section,'Логин или e-mail Filmix','','text','filmix-login');
+      var webPassword=field(section,'Пароль Filmix','','password','filmix-web-password');webPassword.autocomplete='off';
+      var webStatus=el('p','muted',state.config.hasFilmixToken?'Аккаунт подключён к Filmix TV.':'Войдите в аккаунт Filmix TV.');webStatus.id='filmix-status';section.appendChild(webStatus);
+      var webActions=el('div','settings-actions');section.appendChild(webActions);
+      webActions.appendChild(button('Войти в Filmix TV',function(){
+        var gen=state.generation;webStatus.textContent='Входим в Filmix TV…';
+        api('filmix/auth/login',{name:login.value,password:webPassword.value},function(error,r){if(gen!==state.generation)return;webStatus.textContent=error?error.message:(r.login||'Подключено')+' · '+r.plan+' · до '+r.maxQuality+'p';if(!error)state.config.hasFilmixToken=true;});webPassword.value='';
+      }));
+      webActions.appendChild(button('Проверить Filmix',function(){filmixAccountAction('profile');}));
+      webActions.appendChild(button('Отключить Filmix',function(){filmixAccountAction('auth/disconnect');}));return;
+    }
     section.appendChild(el('p','muted','Без TorrServer. Доступное качество зависит от аккаунта и подписки Filmix. Для входа получите код и введите его на сайте со своего телефона.'));
     field(section,'Адрес API Filmix',state.config.filmixApiUrl||'http://filmixapp.cyou/api/v2','url','filmix-api');field(section,'Сайт Filmix для подключения устройства',state.config.filmixSiteUrl||'https://filmix.my','url','filmix-site');
     section.appendChild(el('p','muted','Для HTTP-адреса API токен передаётся без шифрования. Если доступен рабочий HTTPS-адрес Filmix, укажите его выше.'));
@@ -164,8 +186,8 @@
   function filmixAccountAction(action){
     var gen=state.generation;api('filmix/'+action,action==='profile'?null:{},function(err,r){if(gen!==state.generation||!$('filmix-status'))return;
       if(err){$('filmix-status').textContent=err.message;return;}
-      $('filmix-status').textContent=r.code?'Код: '+r.code+' · Введите на '+r.activationUrl+', затем нажмите «Я ввёл код».':action==='auth/disconnect'?'Filmix отключён · гостевой режим':(r.authenticated?(r.login||'Подключено')+' · '+r.plan:'Гость')+' · до '+r.maxQuality+'p';
-      if(action==='auth/check'||action==='auth/disconnect'){state.config.hasFilmixToken=action==='auth/check';$('filmix-token').value='';$('filmix-token').placeholder=state.config.hasFilmixToken?'Сохранён':'';}
+      $('filmix-status').textContent=r.code?'Код: '+r.code+' · Введите на '+r.activationUrl+', затем нажмите «Я ввёл код».':action==='auth/disconnect'?(state.config.filmixTransport==='web'?'Filmix TV отключён':'Filmix отключён · гостевой режим'):(r.authenticated?(r.login||'Подключено')+' · '+r.plan:'Гость')+' · до '+r.maxQuality+'p';
+      if(action==='auth/check'||action==='auth/disconnect'){state.config.hasFilmixToken=action==='auth/check';if($('filmix-token')){$('filmix-token').value='';$('filmix-token').placeholder=state.config.hasFilmixToken?'Сохранён':'';}}
     });
   }
   function searchFilmix(query){
@@ -216,7 +238,7 @@
       state.timer=setTimeout(function(){pollLocalServer(false);},5000);
     });
   }
-  function saveSettings(after){var data={filmixApiUrl:$('filmix-api').value,filmixSiteUrl:$('filmix-site').value,torrserverMode:$('ts-mode').value,torrserverUrl:$('ts-url').value,torrserverUsername:$('ts-user').value,searchProvider:$('search-provider').value,jacredUrl:$('jacred-url').value};if($('filmix-token').value)data.filmixToken=$('filmix-token').value;if($('ts-password').value)data.torrserverPassword=$('ts-password').value;if(!data.torrserverUsername)data.torrserverPassword='';if($('jacred-key').value)data.jacredApiKey=$('jacred-key').value;api('config',data,function(err,r){if(err)return toast(err.message);state.config=r;toast('Настройки сохранены');health(false);if(typeof after==='function')after();});}
+  function saveSettings(after){var step=Number($('seek-step').value);if(!isFinite(step)||Math.floor(step)!==step||step<1||step>3600){toast('Шаг перемотки должен быть целым числом от 1 до 3600 секунд');$('seek-step').focus();return;}var data={seekStep:step,audioFix:$('audio-fix')?$('audio-fix').value:state.config.audioFix||'off',filmixApiUrl:$('filmix-api')?$('filmix-api').value:state.config.filmixApiUrl,filmixSiteUrl:$('filmix-site')?$('filmix-site').value:state.config.filmixSiteUrl,torrserverMode:$('ts-mode').value,torrserverUrl:$('ts-url').value,torrserverUsername:$('ts-user').value,searchProvider:$('search-provider').value,jacredUrl:$('jacred-url').value};if($('filmix-token')&&$('filmix-token').value)data.filmixToken=$('filmix-token').value;if($('ts-password').value)data.torrserverPassword=$('ts-password').value;if(!data.torrserverUsername)data.torrserverPassword='';if($('jacred-key').value)data.jacredApiKey=$('jacred-key').value;api('config',data,function(err,r){if(err)return toast(err.message);state.config=r;toast('Настройки сохранены');health(false);if(typeof after==='function')after();});}
   function health(show){if(state.config.torrserverMode!=='local'&&!state.config.torrserverUrl){$('connection-light').className='';$('connection-text').textContent='Онлайн-просмотр · Filmix';return;}api('health',null,function(err,r){$('connection-light').className=err?'error':'ok';$('connection-text').textContent=err?'TorrServer недоступен':r.version;if(show)toast(err?err.message:'Соединение работает: '+r.version);});}
   function magnetView(){var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','','Вставьте magnet-ссылку или адрес .torrent. Файлы подготовит выбранный TorrServer.'));var input=field(p,'Ссылка на торрент','','text','magnet-link');input.placeholder='magnet:?xt=urn:btih:…';p.appendChild(button('Открыть торрент',function(){openTorrent(input.value,'Торрент по ссылке');},'btn primary'));focusFirst();}
   function openTorrent(link,name,resumeItem){
@@ -285,8 +307,8 @@
   function closeEpisodes(){state.episodesOpen=false;$('player-episodes').className='hidden';video.focus();showOverlay();}
   function playFile(file,resume){
     var switching=!!state.playing;if(switching)updateHistory();else state.returnFocus=document.activeElement;
-    clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);clearTimeout(state.overlayTimer);seekControl.cancel();state.playing=null;video.pause();video.removeAttribute('src');video.load();state.episodesOpen=false;$('player-episodes').className='hidden';state.playing={file:file,lastSave:0,started:Date.now()};state.resume=resume||0;player.className='';$('playing-title').textContent=file.path.split('/').pop();$('playing-status').textContent=state.source==='filmix'?'Загружаем видео Filmix…':'Буферизация · получаем данные от TorrServer…';$('player-back').className='btn';$('player-back').focus();showOverlay();updateHistory(true);
-    var current=state.playing;if(state.source!=='filmix')api('preload',{hash:state.hash,index:file.id},function(err){if(state.playing!==current)return;if(err)$('playing-status').textContent='Предзагрузка: '+err.message+' · пробуем открыть поток';});
+    clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);clearTimeout(state.overlayTimer);seekControl.cancel();state.playing=null;resetAudioVideo();video.pause();video.removeAttribute('src');video.load();state.episodesOpen=false;$('player-episodes').className='hidden';state.playing={file:file,lastSave:0,started:Date.now()};state.resume=resume||0;if($('player-seek-step'))$('player-seek-step').textContent=seekStep()+' сек';player.className='';$('playing-title').textContent=file.path.split('/').pop();$('playing-status').textContent=state.source==='filmix'?'Загружаем видео Filmix…':'Буферизация · получаем данные от TorrServer…';$('player-back').className='btn';$('player-back').focus();showOverlay();updateHistory(true);
+    var current=state.playing;setAudioStatus('');if(window.TWAudio)window.TWAudio.attach(video,state.config.audioFix||'off',function(active,message){if(state.playing!==current)return;if(active)setAudioStatus(message);else recoverAudio(current,message);});if(state.source!=='filmix')api('preload',{hash:state.hash,index:file.id},function(err){if(state.playing!==current)return;if(err)$('playing-status').textContent='Предзагрузка: '+err.message+' · пробуем открыть поток';});
     // Let the TV paint the player before entering its native media pipeline.
     function startVideo(url){if(state.playing!==current)return;video.src=url;video.load();var p=video.play();if(p&&p.catch)p.catch(function(e){if(state.playing===current){$('playing-status').textContent='Не удалось начать просмотр: '+e.message;showOverlay();}});}
     setTimeout(function(){if(state.playing!==current)return;if(state.source==='filmix'){
@@ -296,8 +318,20 @@
     state.playerDeadline=setTimeout(function(){if(state.playing!==current||video.readyState>=3)return;clearTimeout(state.playerTimer);video.pause();video.removeAttribute('src');video.load();current.failed=true;$('playing-status').textContent=state.source==='filmix'?'Не удалось начать просмотр Filmix за 60 секунд. Проверьте доступность видео и выберите другое качество.':'Не удалось начать просмотр за 60 секунд. Проверьте сидов и выберите другую раздачу; её видео или аудио также могут не поддерживаться телевизором.';showOverlay();},60000);
     if(state.source!=='filmix')pollPlayer(current);
   }
+  function setAudioStatus(text){var label=$('audio-mode-status');if(label)label.textContent=text;}
+  function resetAudioVideo(){
+    if(!window.TWAudio||!window.TWAudio.reset())return;
+    seekControl.cancel();video.pause();video.removeAttribute('src');video.load();
+    var previous=video,fresh=previous.cloneNode(false);fresh.muted=previous.muted;fresh.volume=previous.volume;previous.parentNode.replaceChild(fresh,previous);video=fresh;bindVideo();
+  }
+  function recoverAudio(current,message){
+    if(state.playing!==current)return;
+    var url=video.currentSrc||video.getAttribute('src'),position=isFinite(video.currentTime)&&video.currentTime>0?video.currentTime:state.resume,paused=video.paused;
+    resetAudioVideo();state.resume=position||0;setAudioStatus('Оригинальный звук · автофикс недоступен');toast(message+'. Продолжаем с оригинальным звуком.');
+    if(url){video.src=url;video.load();if(!paused){var p=video.play();if(p&&p.catch)p.catch(function(){if(state.playing===current){$('playing-status').textContent='Нажмите OK, чтобы продолжить';showOverlay();}});}}
+  }
   function pollPlayer(current){state.playerTimer=setTimeout(function(){if(state.playing!==current||current.failed||video.readyState>=3)return;api('status?hash='+encodeURIComponent(state.hash),null,function(err,r){if(state.playing!==current||current.failed||video.readyState>=3)return;if(!err){var t=r.torrent,p=t.preload_size?Math.min(100,Math.floor(100*(t.preloaded_bytes||0)/t.preload_size)):0;$('playing-status').textContent='Подготовка: '+p+'% · '+bytes(t.download_speed)+'/с · сиды '+(t.connected_seeders||0)+' · '+Math.floor((Date.now()-current.started)/1000)+' сек. BACK — вернуться к файлам';}pollPlayer(current);});},2000);}
-  function stopPlayer(){updateHistory();seekControl.cancel();state.episodesOpen=false;state.overlayVisible=false;$('player-episodes').className='hidden';state.playing=null;clearTimeout(state.overlayTimer);clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);video.pause();video.removeAttribute('src');video.load();player.className='hidden';if(state.returnFocus&&document.body.contains(state.returnFocus))state.returnFocus.focus();else focusFirst();}
+  function stopPlayer(){updateHistory();seekControl.cancel();state.episodesOpen=false;state.overlayVisible=false;$('player-episodes').className='hidden';state.playing=null;clearTimeout(state.overlayTimer);clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);video.pause();video.removeAttribute('src');video.load();resetAudioVideo();setAudioStatus('');player.className='hidden';if(state.returnFocus&&document.body.contains(state.returnFocus))state.returnFocus.focus();else focusFirst();}
   $('player-back').onclick=stopPlayer;
   function renderPosition(position){
     var duration=isFinite(video.duration)&&video.duration>0?video.duration:0;
@@ -307,6 +341,7 @@
     $('player-timeline').setAttribute('aria-valuenow',String(Math.floor(position||0)));
     $('player-timeline').setAttribute('aria-valuetext',time(position)+' из '+time(duration));
   }
+  function seekStep(){var value=state.config.seekStep;return typeof value==='number'&&isFinite(value)&&Math.floor(value)===value&&value>=1&&value<=3600?value:30;}
   function seek(delta){if(!seekControl.by(delta))toast('Перемотка станет доступна после загрузки метаданных');}
   $('player-timeline').onclick=function(e){
     if(!state.playing)return;e.preventDefault();e.stopPropagation();closeEpisodes();$('player-timeline').focus();
@@ -316,19 +351,27 @@
   var pointerPosition=null;
   player.addEventListener('mousemove',function(e){if(!state.playing)return;if(pointerPosition&&Math.abs(e.clientX-pointerPosition.x)<4&&Math.abs(e.clientY-pointerPosition.y)<4)return;pointerPosition={x:e.clientX,y:e.clientY};showOverlay();});
   player.addEventListener('click',function(e){if(state.playing&&e.target===video)showOverlay();});
+  function bindVideo(){
+  seekControl=TWPlayback.create(video,{
+    onPreview:function(position){renderPosition(position);$('playing-status').textContent='Перемотка к '+time(position)+'…';showOverlay();},
+    onStart:function(position){$('playing-status').textContent='Перемотка к '+time(position)+(state.source==='filmix'?' · ждём данные Filmix…':' · ждём данные от TorrServer…');$('player-back').className='btn';showOverlay();},
+    onDone:function(){if(!state.playing)return;$('playing-status').textContent=video.paused?'Пауза':'';$('player-back').className='hidden';showOverlay();},
+    onError:function(message){if(!state.playing)return;$('playing-status').textContent=message;$('player-back').className='btn';showOverlay();}
+  });
   video.addEventListener('seeked',function(){seekControl.update();});
   video.addEventListener('loadedmetadata',function(){if(state.resume>0){try{video.currentTime=Math.min(state.resume,Math.max(0,video.duration-5));}catch(_){}state.resume=0;}});
   video.addEventListener('playing',function(){clearTimeout(state.playerDeadline);clearTimeout(state.playerTimer);seekControl.update();if(!seekControl.isBusy()){$('playing-status').textContent='';$('player-back').className='hidden';}showOverlay();});video.addEventListener('waiting',function(){if(!state.playing||state.playing.failed)return;if(seekControl.isBusy()){showOverlay();return;}$('playing-status').textContent=state.source==='filmix'?'Буферизация · ждём данные Filmix…':'Буферизация · ждём данные от участников раздачи…';showOverlay();});
   video.addEventListener('canplay',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent=video.paused?'Пауза':'';if(state.overlayTimer===null)armOverlay();});video.addEventListener('pause',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent='Пауза';showOverlay();});video.addEventListener('ended',function(){updateHistory(false,true);stopPlayer();toast('Просмотр завершён');});
   video.addEventListener('error',function(){if(!state.playing)return;var code=video.error?video.error.code:0;$('playing-status').textContent=code===4?'Формат видео или аудио не поддерживается телевизором. Выберите другое видео или качество.':'Ошибка потока ('+code+'). '+(state.source==='filmix'?'Проверьте Filmix или выберите другое качество.':'Проверьте TorrServer и доступность сидов.');showOverlay();});
   video.addEventListener('timeupdate',function(){seekControl.update();renderPosition(seekControl.target()===null?video.currentTime:seekControl.target());if(state.overlayTimer===null)armOverlay();if(state.playing&&!seekControl.isBusy()&&Date.now()-state.playing.lastSave>10000){state.playing.lastSave=Date.now();updateHistory();}});
+  }
+  bindVideo();
   function audioTrack(){var tracks=video.audioTracks;if(!tracks||tracks.length<2)return toast('Другие аудиодорожки недоступны в этом файле');var index=0;for(var i=0;i<tracks.length;i++)if(tracks[i].enabled)index=i;var next=(index+1)%tracks.length;for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===next;toast('Аудио: '+(tracks[next].label||tracks[next].language||next+1));}
-  function navigate(code){var active=document.activeElement;if(active&&(active.tagName==='INPUT'||active.tagName==='SELECT')){if(active.tagName==='SELECT'&&(code===38||code===40))return false;if(code===37&&active.selectionStart>0||code===39&&active.selectionStart<active.value.length)return false;}
-    var all=Array.prototype.slice.call(document.querySelectorAll('button,input,select')).filter(function(e){return e.offsetWidth&&e.offsetHeight&&!e.disabled;});var r=active&&active.getBoundingClientRect();if(!r||active===document.body){if(all[0])all[0].focus();return true;}var best=null,score=Infinity;var x=r.left+r.width/2,y=r.top+r.height/2;
-    all.forEach(function(e){if(e===active)return;var q=e.getBoundingClientRect(),dx=q.left+q.width/2-x,dy=q.top+q.height/2-y;var main=code===37?-dx:code===39?dx:code===38?-dy:dy,cross=code===37||code===39?Math.abs(dy):Math.abs(dx);if(main<=2)return;var s=main+cross*3;if(s<score){score=s;best=e;}});if(best){best.focus();try{best.scrollIntoView({block:'nearest'});}catch(_){best.scrollIntoView(false);}}return true;}
+  function navigate(code){return window.TWNavigation?window.TWNavigation.navigate(code):true;}
   document.addEventListener('keydown',function(e){var c=e.keyCode,active=document.activeElement,back=c===461||c===27||(c===8&&active.tagName!=='INPUT');
     // webOS remote Enter does not synthesize an HTML button click reliably.
     if(c===13){if(state.enterHeld||e.repeat){e.preventDefault();return;}state.enterHeld=true;}
+    if(window.TWNavigation&&window.TWNavigation.handleKeyDown(e))return;
     if(c===13&&!state.playing&&active.tagName==='BUTTON'){e.preventDefault();active.click();return;}
     if(c===13&&!state.playing&&active.tagName==='INPUT'&&active.form){e.preventDefault();var submit=document.createEvent('Event');submit.initEvent('submit',true,true);active.form.dispatchEvent(submit);return;}
     if(state.playing&&state.episodesOpen){
@@ -338,7 +381,7 @@
       if(c===40){e.preventDefault();showOverlay();return;}
     }
     if(state.playing&&c===13&&(state.playing.failed||active===$('player-back')&&$('player-back').className!=='hidden')){e.preventDefault();stopPlayer();return;}
-    if(state.playing){if(back){e.preventDefault();stopPlayer();return;}if([13,19,415,10252].indexOf(c)>=0){e.preventDefault();seekControl.pausedIntent(!video.paused);if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(err){toast(err.message);});}else video.pause();showOverlay();return;}if(c===413){e.preventDefault();stopPlayer();return;}if(c===40||c===38){e.preventDefault();if(c===40)openEpisodes();else hideOverlay();return;}if([37,39,412,417].indexOf(c)>=0){e.preventDefault();seek(c===37||c===412?-30:30);return;}if(c===405){e.preventDefault();audioTrack();return;}showOverlay();return;}
+    if(state.playing){if(back){e.preventDefault();stopPlayer();return;}if([13,19,415,10252].indexOf(c)>=0){e.preventDefault();seekControl.pausedIntent(!video.paused);if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(err){toast(err.message);});}else video.pause();showOverlay();return;}if(c===413){e.preventDefault();stopPlayer();return;}if(c===40||c===38){e.preventDefault();if(c===40)openEpisodes();else hideOverlay();return;}if([37,39,412,417].indexOf(c)>=0){e.preventDefault();seek((c===37||c===412?-1:1)*seekStep());return;}if(c===405){e.preventDefault();audioTrack();return;}showOverlay();return;}
     if(back){e.preventDefault();if(state.view==='filmix-search'){leaveFilmix();}else if(state.view==='details'){change(state.detailOrigin);}else if(state.view==='files'){returnToResults();}else if(state.view==='search'&&state.searchFromDetail&&state.detailItem){openDetails(state.detailItem);}else if(state.view!=='home'){change('home');}else if(document.activeElement!==$('nav-home')){$('nav-home').focus();}else if(window.PalmSystem&&PalmSystem.platformBack){PalmSystem.platformBack();}return;}
     if(c>=37&&c<=40){if(navigate(c))e.preventDefault();}
   });

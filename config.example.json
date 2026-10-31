@@ -6,7 +6,10 @@
   "searchProvider": "vilkadb",
   "jacredUrl": "",
   "jacredApiKey": "",
+  "filmixTransport": "web",
   "filmixApiUrl": "http://filmixapp.cyou/api/v2",
   "filmixSiteUrl": "https://filmix.my",
-  "filmixToken": ""
+  "filmixToken": "",
+  "seekStep": 30,
+  "audioFix": "off"
 }
