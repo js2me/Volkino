@@ -6,12 +6,13 @@
 }(this, function () {
   'use strict';
   var LIMIT = 100, KEY = 'tw-history';
-  function key(item) { return String(item.hash).toLowerCase() + ':' + Number(item.fileId); }
+  function key(item) { return (item.source==='filmix'?'filmix:'+Number(item.filmixId):String(item.hash).toLowerCase()) + ':' + Number(item.fileId); }
   function normalize(items) {
     if (!Array.isArray(items)) return [];
     var seen = {};
     return items.filter(function (h) {
-      if (!h || !/^[a-f0-9]{40}$/i.test(h.hash || '') || !(Number(h.fileId) >= 1) || !h.link || !h.title) return false;
+      if (!h || !(Number(h.fileId) >= 1) || !h.link || !h.title) return false;
+      if(h.source==='filmix'){if(!/^\d+$/.test(String(h.filmixId))||Number(h.filmixId)<1)return false;}else if(!/^[a-f0-9]{40}$/i.test(h.hash||''))return false;
       var id = key(h); if (seen[id]) return false; seen[id] = true; return true;
     }).slice(0, LIMIT);
   }
@@ -35,5 +36,5 @@
     if(!isFinite(position)||!isFinite(duration)||duration<=0||position<=0)return 0;
     var percent=Math.max(0,Math.min(100,100*position/duration));return percent>=95?100:percent;
   }
-  return { progress: progress, limit: LIMIT, normalize: normalize, upsert: upsert, load: load, save: save };
+  return { key: key, progress: progress, limit: LIMIT, normalize: normalize, upsert: upsert, load: load, save: save };
 }));

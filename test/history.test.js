@@ -17,3 +17,8 @@ test('old history survives upgrade; oversized and malformed storage are bounded 
   assert.deepEqual(history.load(storage('{bad')),[]);assert.deepEqual(history.normalize([null,{},entry(1),entry(1)]),[entry(1)]);
 });
 test('reports storage write failures instead of silently pretending to save',()=>{assert.throws(()=>history.save({setItem(){throw new Error('quota');}},[entry(1)]),/quota/);});
+test('Filmix history survives reload, stays separate from torrents and shares episode progress across voices',()=>{
+ const online={source:'filmix',filmixId:42,fileId:10001,title:'Episode',link:'filmix:42',position:120,voice:'Dub',season:1};
+ let list=history.upsert([entry(1)],online);list=history.upsert(list,{...online,voice:'Original',position:240});assert.equal(list.length,2);assert.equal(list[0].position,240);assert.notEqual(history.key(list[0]),history.key(list[1]));
+ const store=storage();history.save(store,list);assert.deepEqual(history.load(store),list);assert.equal(history.normalize([{...online,filmixId:'invalid'}]).length,0);
+});

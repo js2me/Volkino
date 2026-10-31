@@ -18,11 +18,11 @@ fs.mkdirSync(packageDir, { recursive: true });
 fs.writeFileSync(path.join(packageDir, 'packageinfo.json'), JSON.stringify({ id, version: pkg.version, app: id }));
 fs.mkdirSync(path.join(staging, 'control'));
 function treeSize(dir) { return fs.readdirSync(dir, { withFileTypes: true }).reduce((size, e) => size + (e.isDirectory() ? treeSize(path.join(dir, e.name)) : fs.statSync(path.join(dir, e.name)).size), 0); }
-fs.writeFileSync(path.join(staging, 'control/control'), `Package: ${id}\nVersion: ${pkg.version}\nSection: misc\nPriority: optional\nArchitecture: all\nInstalled-Size: ${treeSize(path.join(staging, 'data'))}\nMaintainer: TorrMovie\nDescription: Torrent search and streaming for webOS\nwebOS-Package-Format-Version: 2\nwebOS-Packager-Version: 1.0.0\n`);
+fs.writeFileSync(path.join(staging, 'control/control'), `Package: ${id}\nVersion: ${pkg.version}\nSection: misc\nPriority: optional\nArchitecture: all\nInstalled-Size: ${treeSize(path.join(staging, 'data'))}\nMaintainer: VolKino\nDescription: Torrent search and streaming for webOS\nwebOS-Package-Format-Version: 2\nwebOS-Packager-Version: 1.0.0\n`);
 fs.writeFileSync(path.join(staging, 'debian-binary'), '2.0\n');
 execFileSync('tar', ['--format=ustar', '--owner=0', '--group=0', '-czf', path.join(staging, 'control.tar.gz'), '-C', path.join(staging, 'control'), 'control']);
 execFileSync('tar', ['--format=ustar', '--owner=0', '--group=0', '-czf', path.join(staging, 'data.tar.gz'), '-C', path.join(staging, 'data'), './usr']);
-const ipk = path.join(dest, `${id}_${pkg.version}_all.ipk`);
+const ipk = path.join(dest, `${pkg.name}_${pkg.version}_all.ipk`);
 // webOS' verifier requires literal ar member names (no GNU ar trailing slash).
 // Match ares-package: full regular-file mode 100644 and plain 16-byte names.
 const members = [Buffer.from('!<arch>\n')];

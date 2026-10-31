@@ -1,13 +1,13 @@
 {
-  "name": "torrmovie",
-  "version": "0.4.1",
+  "name": "volkino",
+  "version": "0.6.0",
   "private": true,
   "description": "A remote-friendly webOS torrent search and TorrServer player",
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test test/*.test.js",
     "build": "node scripts/package.mjs",
-    "check": "node --check server/index.js && node --check server/core.js && node --check server/local-torrserver.js && node --check app/app.js"
+    "check": "node --check server/index.js && node --check server/core.js && node --check server/filmix.js && node --check server/local-torrserver.js && node --check app/app.js"
   },
   "engines": {
     "node": ">=8.12"

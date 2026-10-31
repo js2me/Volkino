@@ -5,5 +5,8 @@
   "torrserverPassword": "",
   "searchProvider": "vilkadb",
   "jacredUrl": "",
-  "jacredApiKey": ""
+  "jacredApiKey": "",
+  "filmixApiUrl": "http://filmixapp.cyou/api/v2",
+  "filmixSiteUrl": "https://filmix.my",
+  "filmixToken": ""
 }

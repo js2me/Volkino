@@ -1,0 +1,5 @@
+VolKino wolf logo (🐺, U+1F43A)
+Rendered from Noto Color Emoji by Google and contributors.
+https://github.com/googlefonts/noto-emoji
+Font: SIL Open Font License 1.1. No font files are bundled with the application.
+The generated PNGs are used so the emoji displays consistently on webOS.

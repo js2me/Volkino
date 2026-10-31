@@ -9,7 +9,8 @@ case "$TORRSERVER" in *[!a-zA-Z0-9:/._-]*) echo 'Invalid TorrServer URL' >&2; ex
 cd "$ROOT"
 npm run check
 npm run build
+NAME=$(node -p "require('./package.json').name")
 VERSION=$(node -p "require('./package.json').version")
-scp -O "dist/org.torrenter.watcher_${VERSION}_all.ipk" "$TV:/tmp/torrenter-watcher.ipk"
-scp -O scripts/install-on-tv.js "$TV:/tmp/torrenter-watcher-install.js"
-ssh "$TV" "node /tmp/torrenter-watcher-install.js /tmp/torrenter-watcher.ipk '$TORRSERVER'"
+scp -O "dist/${NAME}_${VERSION}_all.ipk" "$TV:/tmp/volkino.ipk"
+scp -O scripts/install-on-tv.js "$TV:/tmp/volkino-install.js"
+ssh "$TV" "node /tmp/volkino-install.js /tmp/volkino.ipk '$TORRSERVER'"

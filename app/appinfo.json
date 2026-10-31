@@ -1,12 +1,12 @@
 {
   "id": "org.torrenter.watcher",
-  "version": "0.4.1",
-  "vendor": "TorrMovie",
+  "version": "0.6.0",
+  "vendor": "VolKino",
   "type": "web",
   "main": "launcher.html",
-  "title": "TorrMovie",
+  "title": "VolKino",
   "icon": "icon.png",
-  "largeIcon": "icon.png",
+  "largeIcon": "icon-large.png",
   "resolution": "1920x1080",
   "uiRevision": 2,
   "disableBackHistoryAPI": true
