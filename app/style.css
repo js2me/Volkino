@@ -27,3 +27,18 @@ h1.file-page-title{font-size:30px;line-height:1.35;letter-spacing:0;max-height:1
 @media(max-width:1350px){.nav{padding:12px 14px;margin-bottom:4px}.catalog-filters .field{margin-right:12px}.catalog-filters .input{font-size:18px;padding:12px;height:58px}.catalog-filters .btn{font-size:18px;min-height:58px;padding:14px}.catalog-grid .poster-card{flex-basis:160px}.catalog-summary{font-size:16px}}
 
 .detail-torrents{margin-top:34px;padding-top:10px;border-top:1px solid #2c3748}.detail-torrents>h2{margin-bottom:12px}
+
+/* Watch progress stays at the bottom of both file rows and episode cards. */
+.file-card,.episode-card{position:relative;overflow:hidden}
+.file-watch-track{position:absolute;display:block;left:0;right:0;bottom:0;height:4px;background:#ffffff28}
+.file-watch-fill{display:block;height:100%;background:#a6f266;width:0}
+#player-episodes{margin-top:22px}
+#player-episodes h2{font-size:23px;margin:0 0 10px}
+#episode-list{display:flex;overflow-x:auto;padding:7px 5px 14px;scrollbar-width:none}
+#episode-list::-webkit-scrollbar{display:none}
+.episode-card{flex:0 0 300px;min-height:112px;margin-right:16px;padding:18px 20px 22px;text-align:left;border:2px solid #58606b;border-radius:10px;background:#1b2430;color:#f3f5f8}
+.episode-card:focus{border-color:#a6f266;background:#2b3e2a;box-shadow:0 0 0 3px #a6f244}
+.episode-current{border-color:#a6f266}
+.episode-name{display:block;font-size:19px;line-height:1.35;height:52px;overflow:hidden;word-wrap:break-word}
+.episode-meta{display:block;margin-top:10px;font-size:15px;color:#b2c2d2}
+.episode-hint{font-size:15px;color:#bac6d3;margin-top:3px}

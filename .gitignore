@@ -7,3 +7,6 @@ config.json
 
 catalog-cache.json
 catalog-cache.json.tmp
+
+# Locally installed TorrServer and its databases
+torrserver/

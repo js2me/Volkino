@@ -6,10 +6,13 @@ var PORT = Number(process.env.PORT || 32190), HOST = process.env.HOST || '127.0.
 var APP = path.resolve(__dirname, '../app');
 if (!fs.existsSync(path.join(APP, 'index.html'))) APP = path.resolve(__dirname, '..');
 var CONFIG = process.env.TW_CONFIG || path.resolve(__dirname, '../config.json');
-var defaults = { torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '' };
+var defaults = { torrserverMode: 'external', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '' };
 var config = Object.assign({}, defaults);
 try { config = Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') console.error('Cannot load config:', e.message); }
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
+var localTS = require('./local-torrserver').create({directory: path.dirname(CONFIG), port: process.env.TW_TORRSERVER_PORT});
+function tsBase() { return config.torrserverMode === 'local' ? localTS.base : config.torrserverUrl; }
+function tsAuth() { return config.torrserverMode === 'local' ? null : {username: config.torrserverUsername, password: config.torrserverPassword}; }
 var token = crypto.randomBytes(24).toString('hex');
 var catalog=catalogModule.create({cacheFile:path.join(path.dirname(CONFIG),'catalog-cache.json'),fetchPage:function(endpoint){return request(catalogModule.origin,endpoint,null,null,14000).then(JSON.parse);}});
 var imageCache={},imageBytes=0;
@@ -33,7 +36,7 @@ function request(base, endpoint, data, auth, timeout) {
     req.on('error', reject); if (body) req.write(body); req.end();
   });
 }
-function ts(endpoint, data, timeout) { return request(config.torrserverUrl, endpoint, data, { username: config.torrserverUsername, password: config.torrserverPassword }, timeout); }
+function ts(endpoint, data, timeout) { return request(tsBase(), endpoint, data, tsAuth(), timeout); }
 function tsJSON(endpoint, data) { return ts(endpoint, data).then(function (s) { try { return JSON.parse(s); } catch (_) { throw new Error('TorrServer вернул некорректный JSON'); } }); }
 function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(data)); }
 function body(req) {
@@ -43,11 +46,16 @@ function body(req) {
   });
 }
 function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
-function saveConfig(data) {
+function validateConfig(data) {
   var next = Object.assign({}, config);
-  ['torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','jacredUrl','jacredApiKey'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  ['torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','jacredUrl','jacredApiKey'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  if (['external', 'local'].indexOf(next.torrserverMode) < 0) throw new Error('Неизвестный режим TorrServer');
   next.torrserverUrl = core.validBase(next.torrserverUrl, true); next.jacredUrl = core.validBase(next.jacredUrl, true);
   if (['vilkadb','torrserver','torznab','jacred'].indexOf(next.searchProvider) < 0) throw new Error('Неизвестный источник поиска');
+  return next;
+}
+function saveConfig(data) {
+  var next = validateConfig(data);
   // Credentials stay in the helper config, outside the app's browser storage.
   fs.writeFileSync(CONFIG + '.tmp', JSON.stringify(next, null, 2), { mode: 384 }); fs.renameSync(CONFIG + '.tmp', CONFIG); config = next;
 }
@@ -71,9 +79,9 @@ function search(query) {
   });
 }
 function stream(req, res, q) {
-  var endpoint = core.streamPath(q.hash, q.index, false), u = URL.parse(config.torrserverUrl + endpoint), headers = {};
+  var endpoint = core.streamPath(q.hash, q.index, false), u = URL.parse(tsBase() + endpoint), headers = {};
   if (req.headers.range) headers.Range = req.headers.range;
-  if (config.torrserverUsername) headers.Authorization = 'Basic ' + Buffer.from(config.torrserverUsername + ':' + config.torrserverPassword).toString('base64');
+  if (tsAuth() && config.torrserverUsername) headers.Authorization = 'Basic ' + Buffer.from(config.torrserverUsername + ':' + config.torrserverPassword).toString('base64');
   var proxy = (u.protocol === 'https:' ? https : http).request(Object.assign({}, u, { method: req.method, headers: headers }), function (up) {
     var out = { 'Cache-Control': 'no-store' };
     ['content-type','content-length','content-range','accept-ranges'].forEach(function (h) { if (up.headers[h]) out[h] = up.headers[h]; });
@@ -106,8 +114,20 @@ var server = http.createServer(function (req, res) {
   if (route.indexOf('/api/') === 0 && req.headers['x-app-token'] !== token) return json(res, 403, { error: 'Обновите приложение' });
   Promise.resolve().then(function () {
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
-    if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) { saveConfig(b); return publicConfig(); });
-    if (route === '/api/health' && req.method === 'GET') return ts('/echo', null, 6000).then(function (v) { return { ok: true, version: v.trim(), url: config.torrserverUrl }; });
+    if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) {
+      if (localTS.busy()) throw new Error('Дождитесь установки или запуска TorrServer');
+      var local = (b.torrserverMode || config.torrserverMode) === 'local';
+      // Validate before changing process state.
+      validateConfig(b);
+      return (local ? localTS.start() : localTS.stop()).then(function () { saveConfig(b); return publicConfig(); });
+    });
+    if (route === '/api/local-server' && req.method === 'GET') return localTS.status();
+    if (route === '/api/local-server/start' && req.method === 'POST') return localTS.run(true, function () { saveConfig({torrserverMode: 'local'}); });
+    if (route === '/api/local-server/stop' && req.method === 'POST') {
+      if (localTS.busy()) throw new Error('Дождитесь установки или запуска TorrServer');
+      return localTS.stop().then(function () { saveConfig({torrserverMode: 'external'}); return localTS.status(); });
+    }
+    if (route === '/api/health' && req.method === 'GET') return ts('/echo', null, 6000).then(function (v) { return { ok: true, version: v.trim(), url: tsBase() }; });
     if (route === '/api/catalog/browse' && req.method === 'GET') return catalog.browse(q);
     if (route === '/api/catalog/home' && req.method === 'GET') return catalog.home();
     if (route === '/api/catalog/item' && req.method === 'GET') return catalog.item(String(q.key||''));
@@ -129,5 +149,8 @@ var server = http.createServer(function (req, res) {
     return null;
   }).then(function (data) { if (data != null && !res.headersSent) json(res, 200, data); }).catch(function (e) { if (!res.headersSent) json(res, 400, { error: e.message }); });
 });
+if (config.torrserverMode === 'local') localTS.run(false);
+process.once('exit', function () { localTS.kill(); });
+['SIGTERM', 'SIGINT'].forEach(function (signal) { process.once(signal, function () { localTS.kill(); server.close(); process.exit(0); }); });
 server.listen(PORT, HOST, function () { console.log('TorrMovie: http://' + HOST + ':' + PORT); });
 module.exports = server;

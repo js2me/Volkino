@@ -3,13 +3,13 @@
   'use strict';
   var content = document.getElementById('content'), title = document.getElementById('page-title');
   var video = document.getElementById('video'), player = document.getElementById('player');
-  var state = { view: 'search', token: '', config: {}, results: [], query: '', hash: '', torrent: null, files: [], timer: null, generation: 0, playing: null, overlayTimer: null, returnFocus: null, sort: 'seeders', resume: 0, playerTimer: null, playerDeadline: null, enterHeld: false, controlsPinned: false, homeData: null, homeScroll: 0, detailItem: null, lastHomeId: null, searchFromDetail: false, searchGeneration: 0, searchStatus: null, detailScroll: 0, detailTorrentIndex: 0, detailOrigin: 'home', catalogFilters: {type:'movie',genre:'',minRating:0,year:'',sort:'popular',page:1}, catalogGenres: {}, catalogData: null, catalogScroll: 0, catalogLastId: null, catalogAutofocus: false };
+  var state = { view: 'search', token: '', config: {}, results: [], query: '', hash: '', torrent: null, files: [], timer: null, generation: 0, playing: null, overlayTimer: null, returnFocus: null, sort: 'seeders', resume: 0, playerTimer: null, playerDeadline: null, enterHeld: false, episodesOpen: false, episodeIndex: 0, episodeFiles: [], overlayVisible: false, homeData: null, homeScroll: 0, detailItem: null, lastHomeId: null, searchFromDetail: false, searchGeneration: 0, searchStatus: null, detailScroll: 0, detailTorrentIndex: 0, detailOrigin: 'home', catalogFilters: {type:'movie',genre:'',minRating:0,year:'',sort:'popular',page:1}, catalogGenres: {}, catalogData: null, catalogScroll: 0, catalogLastId: null, catalogAutofocus: false };
   var toastTimer, historyWarning=false, history = readHistory();
   var seekControl=TWPlayback.create(video,{
     onPreview:function(position){renderPosition(position);$('playing-status').textContent='Перемотка к '+time(position)+'…';showOverlay();},
     onStart:function(position){$('playing-status').textContent='Перемотка к '+time(position)+' · ждём данные от TorrServer…';$('player-back').className='btn';showOverlay();},
     onDone:function(){if(!state.playing)return;$('playing-status').textContent=video.paused?'Пауза':'';$('player-back').className='hidden';showOverlay();},
-    onError:function(message){if(!state.playing)return;$('playing-status').textContent=message;$('player-back').className='btn';state.controlsPinned=true;showOverlay();}
+    onError:function(message){if(!state.playing)return;$('playing-status').textContent=message;$('player-back').className='btn';showOverlay();}
   });
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -135,24 +135,56 @@
   function sizeNumber(v){if(typeof v==='number')return v;var m=String(v).replace(',','.').match(/([\d.]+)\s*(TB|GB|MB|KB|ТБ|ГБ|МБ|КБ|ТиБ|ГиБ|МиБ|КиБ)/i);if(!m)return Number(v)||0;var u=m[2].toUpperCase(),p=/^(T|Т)/.test(u)?4:/^(G|Г)/.test(u)?3:/^(M|М)/.test(u)?2:1;return Number(m[1])*Math.pow(1024,p);}
   function field(parent,label,value,type,id){var d=el('div','field'),l=el('label','',label),input=el(type==='select'?'select':'input','input');input.id=id;l.htmlFor=id;if(type!=='select'){input.type=type||'text';input.value=value||'';input.autocomplete='off';}d.appendChild(l);d.appendChild(input);parent.appendChild(d);return input;}
   function settingsView(){
-    var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','muted','TorrServer работает на отдельной машине. Укажите её адрес в вашей локальной сети.'));
-    field(p,'Адрес TorrServer',state.config.torrserverUrl,'url','ts-url').placeholder='http://192.168.1.100:8090';
-    var pair=el('div','two-columns');p.appendChild(pair);field(pair,'Логин (если установлен)',state.config.torrserverUsername,'text','ts-user');var password=field(pair,'Пароль','','password','ts-password');password.placeholder=state.config.hasPassword?'Сохранён · пустое поле оставит пароль':'';
+    var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','muted','Выберите TorrServer на этом устройстве или подключите внешний сервер.'));
+    var mode=field(p,'Где запускать TorrServer','','select','ts-mode');[['external','Внешний сервер'],['local','На этом устройстве']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];mode.appendChild(o);});mode.value=state.config.torrserverMode||'external';
+    var local=el('div');p.appendChild(local);var status=el('p','muted','Проверяем локальный сервер…');status.id='local-server-status';local.appendChild(status);
+    local.appendChild(button('Установить и запустить',function(){localServerAction('start');},'btn primary'));local.appendChild(button('Остановить',function(){localServerAction('stop');}));
+    local.appendChild(el('p','muted','При первой установке нужен интернет: TorrServer загружается с GitHub. Кэш видео — 32 МиБ в памяти. Локальный режим запускается вместе с помощником, даже если окно приложения закрыто.'));
+    var external=el('div');p.appendChild(external);
+    function showMode(){external.style.display=mode.value==='external'?'block':'none';local.style.display=mode.value==='local'?'block':'none';}mode.onchange=showMode;showMode();pollLocalServer();
+    field(external,'Адрес TorrServer',state.config.torrserverUrl,'url','ts-url').placeholder='http://192.168.1.100:8090';
+    var pair=el('div','two-columns');external.appendChild(pair);field(pair,'Логин (если установлен)',state.config.torrserverUsername,'text','ts-user');var password=field(pair,'Пароль','','password','ts-password');password.placeholder=state.config.hasPassword?'Сохранён · пустое поле оставит пароль':'';
     var provider=field(p,'Источник поиска','','select','search-provider');[['vilkadb','VilkaDB — как в ForkPlayer'],['torrserver','Rutor — индекс TorrServer'],['torznab','Torznab — индексаторы TorrServer'],['jacred','Jacred — внешний агрегатор']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];provider.appendChild(o);});provider.value=state.config.searchProvider;
     var extra=el('div');p.appendChild(extra);field(extra,'Адрес Jacred',state.config.jacredUrl,'url','jacred-url');var key=field(extra,'API-ключ Jacred (если нужен)','','password','jacred-key');key.placeholder=state.config.hasApiKey?'Сохранён':'';extra.style.display=provider.value==='jacred'?'block':'none';provider.onchange=function(){extra.style.display=provider.value==='jacred'?'block':'none';};
     var actions=el('div','settings-actions');p.appendChild(actions);actions.appendChild(button('Сохранить',saveSettings,'btn primary'));actions.appendChild(button('Проверить сервер',function(){saveSettings(function(){health(true);});}));actions.appendChild(button('Включить поиск Rutor',function(){saveSettings(function(){api('enable-search',{},function(err,r){toast(err?err.message:r.message||'Поиск уже включён');});});}));
     p.appendChild(el('p','muted','Torznab настраивается на стороне TorrServer: добавьте туда адреса Jackett / Prowlarr. Если у раздачи нет сидов, начало просмотра может занять много времени.'));focusFirst();
   }
-  function saveSettings(after){var data={torrserverUrl:$('ts-url').value,torrserverUsername:$('ts-user').value,searchProvider:$('search-provider').value,jacredUrl:$('jacred-url').value};if($('ts-password').value)data.torrserverPassword=$('ts-password').value;if(!data.torrserverUsername)data.torrserverPassword='';if($('jacred-key').value)data.jacredApiKey=$('jacred-key').value;api('config',data,function(err,r){if(err)return toast(err.message);state.config=r;toast('Настройки сохранены');health(false);if(typeof after==='function')after();});}
+  function localServerAction(action){
+    var gen=state.generation;api('local-server/'+action,{},function(err){if(gen!==state.generation)return;if(err)return toast(err.message);pollLocalServer(true);});
+  }
+  function pollLocalServer(refresh){
+    clearTimeout(state.timer);
+    var gen=state.generation;
+    api('local-server',null,function(err,r){
+      if(gen!==state.generation||!$('local-server-status'))return;
+      var labels={stopped:'Остановлен',installing:'Загружаем TorrServer…',starting:'Запускаем TorrServer…',stopping:'Останавливаем TorrServer…',running:'Работает',error:'Ошибка'};
+      $('local-server-status').textContent=err?err.message:(labels[r.state]||r.state)+' · '+r.version+(r.error?' · '+r.error:'');
+      if(!err&&(r.state==='installing'||r.state==='starting'||r.state==='stopping')){state.timer=setTimeout(function(){pollLocalServer(true);},1000);return;}
+      if(refresh&&!err&&r.state!=='error')api('config',null,function(e,c){if(e||gen!==state.generation)return;state.config=c;$('ts-mode').value=c.torrserverMode;$('ts-mode').onchange();health(false);});
+      state.timer=setTimeout(function(){pollLocalServer(false);},5000);
+    });
+  }
+  function saveSettings(after){var data={torrserverMode:$('ts-mode').value,torrserverUrl:$('ts-url').value,torrserverUsername:$('ts-user').value,searchProvider:$('search-provider').value,jacredUrl:$('jacred-url').value};if($('ts-password').value)data.torrserverPassword=$('ts-password').value;if(!data.torrserverUsername)data.torrserverPassword='';if($('jacred-key').value)data.jacredApiKey=$('jacred-key').value;api('config',data,function(err,r){if(err)return toast(err.message);state.config=r;toast('Настройки сохранены');health(false);if(typeof after==='function')after();});}
   function health(show){api('health',null,function(err,r){$('connection-light').className=err?'error':'ok';$('connection-text').textContent=err?'TorrServer недоступен':r.version;if(show)toast(err?err.message:'Соединение работает: '+r.version);});}
-  function magnetView(){var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','','Вставьте magnet-ссылку или адрес .torrent. Файлы подготовит внешний TorrServer.'));var input=field(p,'Ссылка на торрент','','text','magnet-link');input.placeholder='magnet:?xt=urn:btih:…';p.appendChild(button('Открыть торрент',function(){openTorrent(input.value,'Торрент по ссылке');},'btn primary'));focusFirst();}
+  function magnetView(){var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','','Вставьте magnet-ссылку или адрес .torrent. Файлы подготовит выбранный TorrServer.'));var input=field(p,'Ссылка на торрент','','text','magnet-link');input.placeholder='magnet:?xt=urn:btih:…';p.appendChild(button('Открыть торрент',function(){openTorrent(input.value,'Торрент по ссылке');},'btn primary'));focusFirst();}
   function openTorrent(link,name,resumeItem){
     change('files');state.hash='';state.torrent=null;state.files=[];title.textContent=name;message('Получаем список файлов…','TorrServer ищет участников раздачи и метаданные. Это может занять до двух минут.',true);
     var gen=state.generation;api('add',{link:link,title:name},function(err,r){if(gen!==state.generation)return;if(err){content.innerHTML='';message('Не удалось открыть торрент',err.message);content.appendChild(button('К раздачам',returnToResults));focusFirst();return;}state.hash=r.hash;state.torrent=r;state.originalLink=link;pollFiles(gen,Date.now(),resumeItem);});
   }
   function pollFiles(gen,started,resumeItem){api('status?hash='+encodeURIComponent(state.hash),null,function(err,r){if(gen!==state.generation)return;if(err){content.innerHTML='';message('Не удалось получить файлы',err.message);content.appendChild(button('Повторить',function(){pollFiles(gen,Date.now(),resumeItem);}));focusFirst();return;}state.torrent=r.torrent;state.files=r.files;if(r.files.length){renderFiles();if(resumeItem){var f=r.files.filter(function(x){return x.id===resumeItem.fileId;})[0];if(f)playFile(f,resumeItem.position);}return;}if(Date.now()-started>120000){content.innerHTML='';message('Метаданные пока не получены','Возможно, у раздачи нет доступных участников. Попробуйте другую раздачу или повторите запрос.');content.appendChild(button('Подождать ещё',function(){content.innerHTML='';message('Ждём метаданные…','Можно вернуться назад и выбрать другую раздачу.',true);pollFiles(gen,Date.now(),resumeItem);}));content.appendChild(button('К результатам',returnToResults));focusFirst();return;}state.timer=setTimeout(function(){pollFiles(gen,started,resumeItem);},2000);});}
   function statsBar(t){var d=el('div','statusbar');['↓ '+bytes(t.download_speed)+'/с','Пиры: '+(t.active_peers||0),'Сиды: '+(t.connected_seeders||0),'Размер: '+bytes(t.torrent_size)].forEach(function(x){d.appendChild(el('span','',x));});return d;}
-  function renderFiles(){content.innerHTML='';title.textContent=state.torrent.title||state.torrent.name||'Выберите файл';content.appendChild(statsBar(state.torrent));content.appendChild(el('p','muted','Выберите видео. Плеер поддерживает перемотку, паузу и продолжение просмотра.'));state.files.forEach(function(f,i){content.appendChild(row(i+1,f.path,[{text:bytes(f.length)}],function(){playFile(f,0);}));});focusFirst();}
+  function watchedFile(file){return history.filter(function(h){return h.hash.toLowerCase()===state.hash.toLowerCase()&&Number(h.fileId)===Number(file.id);})[0];}
+  function fileProgress(file){
+    var h=watchedFile(file);
+    if(state.playing&&Number(state.playing.file.id)===Number(file.id)&&isFinite(video.duration)&&video.duration>0)h={position:video.currentTime,duration:video.duration,completed:h&&h.completed};
+    return TWHistory.progress(h);
+  }
+  function appendFileProgress(card,file){
+    var track=el('span','file-watch-track'),fill=el('span','file-watch-fill');fill.setAttribute('data-file-id',String(file.id));track.setAttribute('role','img');track.appendChild(fill);card.appendChild(track);setFileProgress(fill,fileProgress(file));
+  }
+  function setFileProgress(fill,percent){fill.style.width=percent+'%';fill.parentNode.setAttribute('aria-label',percent>=100?'Просмотрено':'Просмотрено '+Math.floor(percent)+'%');}
+  function refreshFileProgress(){Array.prototype.forEach.call(document.querySelectorAll('.file-watch-fill'),function(fill){var id=Number(fill.getAttribute('data-file-id')),file=state.files.filter(function(f){return Number(f.id)===id;})[0];if(file)setFileProgress(fill,fileProgress(file));});}
+  function renderFiles(){content.innerHTML='';title.textContent=state.torrent.title||state.torrent.name||'Выберите файл';content.appendChild(statsBar(state.torrent));content.appendChild(el('p','muted','Выберите видео. Плеер поддерживает перемотку, паузу и продолжение просмотра.'));state.files.forEach(function(f,i){var card=row(i+1,f.path,[{text:bytes(f.length)}],function(){var h=watchedFile(f);playFile(f,h&&!h.completed?h.position:0);});card.className+=' file-card';appendFileProgress(card,f);content.appendChild(card);});focusFirst();}
   function torrentsView(){var gen=state.generation;message('Загружаем список…','Торренты, которые уже добавлены в ваш TorrServer.',true);api('torrents',null,function(err,list){if(gen!==state.generation)return;content.innerHTML='';if(err){message('Сервер недоступен',err.message);return;}if(!list.length){message('Пока пусто','Найдите фильм через поиск или откройте magnet-ссылку.');return;}list.forEach(function(t,i){content.appendChild(row(i+1,t.title||t.name||t.hash,[{text:bytes(t.torrent_size)},{text:t.stat_string}],function(){openTorrent('magnet:?xt=urn:btih:'+t.hash,t.title||t.name);}));});focusFirst();});}
   function historyView(){
     if(!history.length){message('История пока пуста','Откройте видео — сохраним его сразу. Здесь остаются последние 100 файлов и позиции просмотра.');return;}
@@ -160,18 +192,47 @@
     history.forEach(function(h,i){var date=new Date(h.updated);var when=isNaN(date.getTime())?'':date.toLocaleDateString('ru-RU');content.appendChild(row(i+1,h.title,[{text:h.position>0?time(h.position)+' / '+time(h.duration):'Открыто · просмотр ещё не начат'},{text:when},{text:h.torrentTitle||h.fileName}],function(){openTorrent(h.link,h.torrentTitle,h);}));});
     content.appendChild(button('Очистить историю',function(){history=[];storeHistory();change('history');}));focusFirst();
   }
-  function updateHistory(opening){
+  function updateHistory(opening,completed){
     if(!state.playing)return;var p=state.playing;
     var previous=history.filter(function(h){return h.hash.toLowerCase()===state.hash.toLowerCase()&&Number(h.fileId)===Number(p.file.id);})[0];
     // Before metadata arrives, keep the previous position instead of overwriting it with zero.
     var position=opening||!isFinite(video.currentTime)||video.currentTime<0.1?(previous?previous.position||0:state.resume||0):video.currentTime;
     var duration=!opening&&isFinite(video.duration)&&video.duration>0?video.duration:previous?previous.duration||0:0;
-    var item={hash:state.hash,fileId:p.file.id,fileName:p.file.path,title:p.file.path.split('/').pop(),torrentTitle:state.torrent.title||state.torrent.name,link:state.originalLink||'magnet:?xt=urn:btih:'+state.hash,position:position,duration:duration,updated:Date.now()};
-    history=TWHistory.upsert(history,item);storeHistory();
+    var item={hash:state.hash,fileId:p.file.id,fileName:p.file.path,title:p.file.path.split('/').pop(),torrentTitle:state.torrent.title||state.torrent.name,link:state.originalLink||'magnet:?xt=urn:btih:'+state.hash,position:position,duration:duration,completed:!!completed||!!(previous&&previous.completed)||(!opening&&duration>0&&position/duration>=0.95),updated:Date.now()};
+    history=TWHistory.upsert(history,item);storeHistory();refreshFileProgress();
   }
-  function showOverlay(){ $('player-top').className='';$('player-controls').className='';clearTimeout(state.overlayTimer);if(!video.paused&&video.readyState>=3&&!state.controlsPinned&&!seekControl.isBusy())state.overlayTimer=setTimeout(function(){$('player-top').className='hidden';$('player-controls').className='hidden';},5000);}
+  function armOverlay(){
+    clearTimeout(state.overlayTimer);state.overlayTimer=null;
+    if(!state.playing||!state.overlayVisible||video.paused||video.readyState<3||seekControl.isBusy()||state.playing.failed)return;
+    state.overlayTimer=setTimeout(function(){state.overlayTimer=null;if(!video.paused&&!seekControl.isBusy()&&video.readyState>=3)hideOverlay();},5000);
+  }
+  function showOverlay(){if(!state.playing)return;state.overlayVisible=true;$('player-top').className='';$('player-controls').className='';armOverlay();}
+  function hideOverlay(){
+    clearTimeout(state.overlayTimer);state.overlayTimer=null;state.overlayVisible=false;state.episodesOpen=false;
+    $('player-top').className='hidden';$('player-controls').className='hidden';$('player-episodes').className='hidden';
+    if(player.contains(document.activeElement)&&document.activeElement!==video)video.focus();
+  }
+  function fileFolder(file){var name=file.path.replace(/\\/g,'/');return name.slice(0,name.lastIndexOf('/')+1);}
+  function focusEpisode(index){
+    var cards=$('episode-list').querySelectorAll('button');if(!cards.length)return;
+    state.episodeIndex=Math.max(0,Math.min(index,cards.length-1));var card=cards[state.episodeIndex];card.focus();
+    try{card.scrollIntoView({block:'nearest',inline:'nearest'});}catch(_){card.scrollIntoView(false);}showOverlay();
+  }
+  function openEpisodes(){
+    if(!state.playing)return;updateHistory();var current=state.playing.file,folder=fileFolder(current),list=$('episode-list');list.innerHTML='';
+    state.episodeFiles=state.files.filter(function(f){return fileFolder(f)===folder;});state.episodeIndex=0;
+    state.episodeFiles.forEach(function(file,i){
+      var selected=Number(file.id)===Number(current.id);if(selected)state.episodeIndex=i;
+      var card=button('',function(){if(Number(file.id)===Number(state.playing.file.id)){closeEpisodes();return;}var h=watchedFile(file);playFile(file,h&&!h.completed?h.position:0);},'episode-card'+(selected?' episode-current':''));
+      card.appendChild(el('span','episode-name',file.path.replace(/\\/g,'/').split('/').pop()));card.appendChild(el('span','episode-meta',selected?'Сейчас смотрите':bytes(file.length)));if(selected)card.setAttribute('aria-current','true');
+      card.onfocus=function(){state.episodeIndex=i;showOverlay();};appendFileProgress(card,file);list.appendChild(card);
+    });
+    state.episodesOpen=true;$('player-episodes').className='';focusEpisode(state.episodeIndex);
+  }
+  function closeEpisodes(){state.episodesOpen=false;$('player-episodes').className='hidden';video.focus();showOverlay();}
   function playFile(file,resume){
-    seekControl.cancel();state.controlsPinned=false;state.returnFocus=document.activeElement;state.playing={file:file,lastSave:0,started:Date.now()};state.resume=resume||0;player.className='';$('playing-title').textContent=file.path.split('/').pop();$('playing-status').textContent='Буферизация · получаем данные от TorrServer…';$('player-back').className='btn';$('player-back').focus();showOverlay();updateHistory(true);
+    var switching=!!state.playing;if(switching)updateHistory();else state.returnFocus=document.activeElement;
+    clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);clearTimeout(state.overlayTimer);seekControl.cancel();state.playing=null;video.pause();video.removeAttribute('src');video.load();state.episodesOpen=false;$('player-episodes').className='hidden';state.playing={file:file,lastSave:0,started:Date.now()};state.resume=resume||0;player.className='';$('playing-title').textContent=file.path.split('/').pop();$('playing-status').textContent='Буферизация · получаем данные от TorrServer…';$('player-back').className='btn';$('player-back').focus();showOverlay();updateHistory(true);
     var current=state.playing;api('preload',{hash:state.hash,index:file.id},function(err){if(state.playing!==current)return;if(err)$('playing-status').textContent='Предзагрузка: '+err.message+' · пробуем открыть поток';});
     // Let the TV paint the player before entering its native media pipeline.
     setTimeout(function(){if(state.playing!==current)return;video.src='/stream?hash='+encodeURIComponent(state.hash)+'&index='+file.id;video.load();var p=video.play();if(p&&p.catch)p.catch(function(e){if(state.playing===current){$('playing-status').textContent='Не удалось начать просмотр: '+e.message;showOverlay();}});},100);
@@ -179,7 +240,7 @@
     pollPlayer(current);
   }
   function pollPlayer(current){state.playerTimer=setTimeout(function(){if(state.playing!==current||current.failed||video.readyState>=3)return;api('status?hash='+encodeURIComponent(state.hash),null,function(err,r){if(state.playing!==current||current.failed||video.readyState>=3)return;if(!err){var t=r.torrent,p=t.preload_size?Math.min(100,Math.floor(100*(t.preloaded_bytes||0)/t.preload_size)):0;$('playing-status').textContent='Подготовка: '+p+'% · '+bytes(t.download_speed)+'/с · сиды '+(t.connected_seeders||0)+' · '+Math.floor((Date.now()-current.started)/1000)+' сек. BACK — вернуться к файлам';}pollPlayer(current);});},2000);}
-  function stopPlayer(){updateHistory();seekControl.cancel();state.controlsPinned=false;state.playing=null;clearTimeout(state.overlayTimer);clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);video.pause();video.removeAttribute('src');video.load();player.className='hidden';if(state.returnFocus&&document.body.contains(state.returnFocus))state.returnFocus.focus();else focusFirst();}
+  function stopPlayer(){updateHistory();seekControl.cancel();state.episodesOpen=false;state.overlayVisible=false;$('player-episodes').className='hidden';state.playing=null;clearTimeout(state.overlayTimer);clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);video.pause();video.removeAttribute('src');video.load();player.className='hidden';if(state.returnFocus&&document.body.contains(state.returnFocus))state.returnFocus.focus();else focusFirst();}
   $('player-back').onclick=stopPlayer;
   function renderPosition(position){
     var duration=isFinite(video.duration)&&video.duration>0?video.duration:0;
@@ -191,17 +252,19 @@
   }
   function seek(delta){if(!seekControl.by(delta))toast('Перемотка станет доступна после загрузки метаданных');}
   $('player-timeline').onclick=function(e){
-    if(!state.playing)return;e.preventDefault();e.stopPropagation();state.controlsPinned=true;$('player-timeline').focus();
+    if(!state.playing)return;e.preventDefault();e.stopPropagation();closeEpisodes();$('player-timeline').focus();
     var rect=$('player-timeline').getBoundingClientRect();var position=TWPlayback.pointerTime(e.clientX,rect.left,rect.width,video.duration);
     if(position===null||!seekControl.to(position))toast('Перемотка станет доступна после загрузки метаданных');
   };
-  player.addEventListener('mousemove',function(){if(state.playing)showOverlay();});
+  var pointerPosition=null;
+  player.addEventListener('mousemove',function(e){if(!state.playing)return;if(pointerPosition&&Math.abs(e.clientX-pointerPosition.x)<4&&Math.abs(e.clientY-pointerPosition.y)<4)return;pointerPosition={x:e.clientX,y:e.clientY};showOverlay();});
+  player.addEventListener('click',function(e){if(state.playing&&e.target===video)showOverlay();});
   video.addEventListener('seeked',function(){seekControl.update();});
   video.addEventListener('loadedmetadata',function(){if(state.resume>0){try{video.currentTime=Math.min(state.resume,Math.max(0,video.duration-5));}catch(_){}state.resume=0;}});
   video.addEventListener('playing',function(){clearTimeout(state.playerDeadline);clearTimeout(state.playerTimer);seekControl.update();if(!seekControl.isBusy()){$('playing-status').textContent='';$('player-back').className='hidden';}showOverlay();});video.addEventListener('waiting',function(){if(!state.playing||state.playing.failed)return;if(seekControl.isBusy()){showOverlay();return;}$('playing-status').textContent='Буферизация · ждём данные от участников раздачи…';showOverlay();});
-  video.addEventListener('canplay',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent=video.paused?'Пауза':'';});video.addEventListener('pause',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent='Пауза';showOverlay();});video.addEventListener('ended',function(){updateHistory();stopPlayer();toast('Просмотр завершён');});
+  video.addEventListener('canplay',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent=video.paused?'Пауза':'';if(state.overlayTimer===null)armOverlay();});video.addEventListener('pause',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent='Пауза';showOverlay();});video.addEventListener('ended',function(){updateHistory(false,true);stopPlayer();toast('Просмотр завершён');});
   video.addEventListener('error',function(){if(!state.playing)return;var code=video.error?video.error.code:0;$('playing-status').textContent=code===4?'Формат видео или аудио не поддерживается телевизором. Выберите другую раздачу.':'Ошибка потока ('+code+'). Проверьте TorrServer и доступность сидов.';showOverlay();});
-  video.addEventListener('timeupdate',function(){seekControl.update();renderPosition(seekControl.target()===null?video.currentTime:seekControl.target());if(state.playing&&!seekControl.isBusy()&&Date.now()-state.playing.lastSave>10000){state.playing.lastSave=Date.now();updateHistory();}});
+  video.addEventListener('timeupdate',function(){seekControl.update();renderPosition(seekControl.target()===null?video.currentTime:seekControl.target());if(state.overlayTimer===null)armOverlay();if(state.playing&&!seekControl.isBusy()&&Date.now()-state.playing.lastSave>10000){state.playing.lastSave=Date.now();updateHistory();}});
   function audioTrack(){var tracks=video.audioTracks;if(!tracks||tracks.length<2)return toast('Другие аудиодорожки недоступны в этом файле');var index=0;for(var i=0;i<tracks.length;i++)if(tracks[i].enabled)index=i;var next=(index+1)%tracks.length;for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===next;toast('Аудио: '+(tracks[next].label||tracks[next].language||next+1));}
   function navigate(code){var active=document.activeElement;if(active&&(active.tagName==='INPUT'||active.tagName==='SELECT')){if(active.tagName==='SELECT'&&(code===38||code===40))return false;if(code===37&&active.selectionStart>0||code===39&&active.selectionStart<active.value.length)return false;}
     var all=Array.prototype.slice.call(document.querySelectorAll('button,input,select')).filter(function(e){return e.offsetWidth&&e.offsetHeight&&!e.disabled;});var r=active&&active.getBoundingClientRect();if(!r||active===document.body){if(all[0])all[0].focus();return true;}var best=null,score=Infinity;var x=r.left+r.width/2,y=r.top+r.height/2;
@@ -211,8 +274,14 @@
     if(c===13){if(state.enterHeld||e.repeat){e.preventDefault();return;}state.enterHeld=true;}
     if(c===13&&!state.playing&&active.tagName==='BUTTON'){e.preventDefault();active.click();return;}
     if(c===13&&!state.playing&&active.tagName==='INPUT'&&active.form){e.preventDefault();var submit=document.createEvent('Event');submit.initEvent('submit',true,true);active.form.dispatchEvent(submit);return;}
+    if(state.playing&&state.episodesOpen){
+      if(back||c===38){e.preventDefault();closeEpisodes();return;}
+      if(c===37||c===39){e.preventDefault();focusEpisode(state.episodeIndex+(c===37?-1:1));return;}
+      if(c===13){e.preventDefault();var card=$('episode-list').querySelectorAll('button')[state.episodeIndex];if(card)card.click();return;}
+      if(c===40){e.preventDefault();showOverlay();return;}
+    }
     if(state.playing&&c===13&&(state.playing.failed||active===$('player-back')&&$('player-back').className!=='hidden')){e.preventDefault();stopPlayer();return;}
-    if(state.playing){if(back){e.preventDefault();stopPlayer();return;}if([13,19,415,10252].indexOf(c)>=0){e.preventDefault();seekControl.pausedIntent(!video.paused);if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(err){toast(err.message);});}else video.pause();showOverlay();return;}if(c===413){e.preventDefault();stopPlayer();return;}if(c===40||c===38){e.preventDefault();state.controlsPinned=c===40;showOverlay();if(c===40)$('player-timeline').focus();else $('player-timeline').blur();return;}if([37,39,412,417].indexOf(c)>=0){e.preventDefault();seek(c===37||c===412?-30:30);return;}if(c===405){e.preventDefault();audioTrack();return;}showOverlay();return;}
+    if(state.playing){if(back){e.preventDefault();stopPlayer();return;}if([13,19,415,10252].indexOf(c)>=0){e.preventDefault();seekControl.pausedIntent(!video.paused);if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(err){toast(err.message);});}else video.pause();showOverlay();return;}if(c===413){e.preventDefault();stopPlayer();return;}if(c===40||c===38){e.preventDefault();if(c===40)openEpisodes();else hideOverlay();return;}if([37,39,412,417].indexOf(c)>=0){e.preventDefault();seek(c===37||c===412?-30:30);return;}if(c===405){e.preventDefault();audioTrack();return;}showOverlay();return;}
     if(back){e.preventDefault();if(state.view==='details'){change(state.detailOrigin);}else if(state.view==='files'){returnToResults();}else if(state.view==='search'&&state.searchFromDetail&&state.detailItem){openDetails(state.detailItem);}else if(state.view!=='home'){change('home');}else if(document.activeElement!==$('nav-home')){$('nav-home').focus();}else if(window.PalmSystem&&PalmSystem.platformBack){PalmSystem.platformBack();}return;}
     if(c>=37&&c<=40){if(navigate(c))e.preventDefault();}
   });
@@ -220,5 +289,5 @@
   window.addEventListener('blur',function(){state.enterHeld=false;});
   document.addEventListener('visibilitychange',function(){if(document.hidden&&state.playing){video.pause();updateHistory();}});window.addEventListener('beforeunload',function(){updateHistory();});
   Array.prototype.forEach.call(document.querySelectorAll('[data-view]'),function(b){b.onclick=function(){state.searchFromDetail=false;change(b.getAttribute('data-view'));};});
-  api('session',null,function(err,r){if(err){message('Помощник недоступен',err.message);return;}state.token=r.token;api('config',null,function(e,c){if(e){message('Ошибка настроек',e.message);return;}state.config=c;storeHistory();change(c.torrserverUrl?'home':'settings');health(false);});});
+  api('session',null,function(err,r){if(err){message('Помощник недоступен',err.message);return;}state.token=r.token;api('config',null,function(e,c){if(e){message('Ошибка настроек',e.message);return;}state.config=c;storeHistory();change(c.torrserverMode==='local'||c.torrserverUrl?'home':'settings');health(false);});});
 }());

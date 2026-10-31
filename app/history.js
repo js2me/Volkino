@@ -29,5 +29,11 @@
     storage.setItem(KEY, JSON.stringify(result));
     return result;
   }
-  return { limit: LIMIT, normalize: normalize, upsert: upsert, load: load, save: save };
+  function progress(item) {
+    if(!item)return 0;if(item.completed)return 100;
+    var position=Number(item.position),duration=Number(item.duration);
+    if(!isFinite(position)||!isFinite(duration)||duration<=0||position<=0)return 0;
+    var percent=Math.max(0,Math.min(100,100*position/duration));return percent>=95?100:percent;
+  }
+  return { progress: progress, limit: LIMIT, normalize: normalize, upsert: upsert, load: load, save: save };
 }));

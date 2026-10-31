@@ -45,3 +45,20 @@ test('a failed automatic search can retry on the same details page',()=>{
  const h=boot();h.openDetails(movie);h.reply('search?',{error:'Offline'},503);assert.match(h.content.textContent,/Offline/);
  const retry=h.content.querySelectorAll('button').find(b=>b.textContent==='Повторить поиск');assert.ok(retry);retry.onclick();h.reply('search?',{results:[torrent]});assert.equal(h.state.view,'details');assert.ok(h.content.querySelector('.torrent'));
 });
+
+test('settings exposes local installation and keeps a failed installation visible',()=>{
+ const h=boot();h.state.config={torrserverMode:'external',torrserverUrl:'http://external:8090'};h.change('settings');
+ const mode=h.document.getElementById('ts-mode');assert.equal(mode.value,'external');mode.value='local';mode.onchange();
+ const install=h.content.querySelectorAll('button').find(b=>b.textContent==='Установить и запустить');assert.ok(install);install.onclick();
+ h.reply('local-server/start',{state:'installing'});h.reply('local-server',{state:'installing',version:'MatriX.test'});
+ assert.match(h.document.getElementById('local-server-status').textContent,/Загружаем/);
+ h.reply('local-server',{state:'error',version:'MatriX.test',error:'SHA-256 mismatch'});
+ assert.match(h.document.getElementById('local-server-status').textContent,/SHA-256 mismatch/);assert.equal(mode.value,'local');
+ h.change('files');
+});
+test('a late local-server action cannot cancel polling on the next page',()=>{
+ const h=boot();h.state.config={torrserverMode:'external'};h.change('settings');
+ h.content.querySelectorAll('button').find(b=>b.textContent==='Установить и запустить').onclick();
+ h.change('files');const marker=setTimeout(()=>{},10000);h.state.timer=marker;
+ h.reply('local-server/start',{state:'installing'});assert.equal(h.state.timer,marker);assert.equal(marker._destroyed,false);clearTimeout(marker);
+});
