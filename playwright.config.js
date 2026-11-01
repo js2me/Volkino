@@ -2,6 +2,8 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './test/browser',
+  // Settings tests mutate the same in-memory mock config.
+  workers: 1,
   use: { baseURL: 'http://127.0.0.1:32199', viewport: { width: 1920, height: 1080 } },
   webServer: [{
     command: 'node server/index.js',

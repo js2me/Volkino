@@ -1,0 +1,56 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const android = path.join(root, 'android');
+const vendor = path.join(android, 'vendor');
+fs.mkdirSync(vendor, { recursive: true });
+const lock = JSON.parse(fs.readFileSync(path.join(android, 'vendor-lock.json')));
+const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+for (const [name, info] of Object.entries(lock)) {
+  const file = path.join(vendor, name);
+  if (fs.existsSync(file) && digest(file) === info.sha256) continue;
+  console.log(`Downloading ${name}`);
+  const response = await fetch(info.url, { signal: AbortSignal.timeout(180000) });
+  if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+  const data = Buffer.from(await response.arrayBuffer());
+  if (createHash('sha256').update(data).digest('hex') !== info.sha256) throw new Error(`${name}: SHA-256 mismatch`);
+  fs.writeFileSync(file, data);
+}
+// Always extract from the verified archive, rather than trusting an old extracted tree.
+fs.rmSync(path.join(vendor, 'node'), { recursive: true, force: true });
+execFileSync('unzip', ['-q', path.join(vendor, 'node.zip'), '-d', path.join(vendor, 'node')]);
+const generated = path.join(android, 'app/build/generated');
+const assets = path.join(generated, 'assets');
+const staging = path.join(generated, 'runtime');
+fs.rmSync(staging, { recursive: true, force: true });
+fs.mkdirSync(path.join(staging, 'app'), { recursive: true });
+fs.mkdirSync(assets, { recursive: true });
+for (const name of ['index.html', 'app.js', 'catalog.js', 'catalog.css', 'history.js', 'playback.js', 'icon.png', 'wolf.png']) {
+  fs.copyFileSync(path.join(root, 'app', name), path.join(staging, 'app', name));
+}
+fs.cpSync(path.join(root, 'server'), path.join(staging, 'server'), { recursive: true });
+const archive = path.join(assets, 'runtime.zip');
+fs.rmSync(archive, { force: true });
+execFileSync('zip', ['-qr', archive, 'app', 'server'], { cwd: staging });
+for (const [abi, arch] of Object.entries({ 'armeabi-v7a': 'arm7', 'arm64-v8a': 'arm64', x86_64: 'amd64' })) {
+  const dir = path.join(generated, 'jniLibs', abi);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(path.join(vendor, `TorrServer-android-${arch}`), path.join(dir, 'libtorrserver.so'));
+}
+for (const name of ['NODE-LICENSE', 'TORRSERVER-LICENSE']) fs.copyFileSync(path.join(vendor, name), path.join(assets, name));
+fs.writeFileSync(path.join(assets, 'THIRD-PARTY-NOTICES.txt'), `VolKino includes Node.js Mobile v18.20.4 (MIT and third-party licenses, see NODE-LICENSE) and TorrServer MatriX.147.2 (GPL-3.0, see TORRSERVER-LICENSE).\nSources: https://github.com/nodejs-mobile/nodejs-mobile/tree/v18.20.4\nhttps://github.com/YouROK/TorrServer/tree/MatriX.147.2\n`);
+const drawable = path.join(android, 'app/src/main/res/drawable');
+fs.copyFileSync(path.join(root, 'app/icon-large.png'), path.join(drawable, 'icon.png'));
+if (process.argv.includes('--prepare')) { console.log('Android assets prepared'); process.exit(0); }
+const release = process.argv.includes('--release');
+execFileSync(path.join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'), [release ? 'assembleRelease' : 'assembleDebug', '--console=plain'], { cwd: android, stdio: 'inherit' });
+const type = release ? 'release' : 'debug';
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
+const dest = path.join(root, 'dist', `volkino_${pkg.version}_android-${type}${release ? '-unsigned' : ''}.apk`);
+fs.mkdirSync(path.dirname(dest), { recursive: true });
+fs.copyFileSync(path.join(android, `app/build/outputs/apk/${type}/app-${type}${release ? '-unsigned' : ''}.apk`), dest);
+console.log(dest);

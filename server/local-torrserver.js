@@ -30,7 +30,7 @@ function download(url, file, digest, redirects) {
   });
 }
 function create(options) {
-  var dir = path.join(options.directory, 'torrserver'), binary = path.join(dir, 'TorrServer-' + release.version);
+  var dir = path.join(options.directory, 'torrserver'), binary = process.env.TW_TORRSERVER_BINARY || path.join(dir, 'TorrServer-' + release.version);
   var child = null, job = null, phase = 'stopped', error = '', stopping = null, starting = null;
   var port = Number(options.port || 32191), base = 'http://127.0.0.1:' + port;
   function status() { return { installed: fs.existsSync(binary), state: phase, error: error, version: release.version, url: base }; }
@@ -94,6 +94,7 @@ function create(options) {
     phase = install ? 'installing' : 'starting'; error = '';
     job = Promise.resolve().then(function () {
       if (!install || fs.existsSync(binary)) return;
+      if (process.env.TW_TORRSERVER_BINARY) throw new Error('В APK отсутствует встроенный TorrServer. Переустановите приложение.');
       var name = asset(process.platform, process.arch); mkdir(dir);
       return download('https://github.com/YouROK/TorrServer/releases/download/' + release.version + '/' + name, binary + '.tmp', release.hashes[name], 0).then(function () { fs.chmodSync(binary + '.tmp', 448); fs.renameSync(binary + '.tmp', binary); });
     }).then(start).then(function () { if (ready) ready(); }).catch(function (e) { phase = 'error'; error = e.message; try { fs.unlinkSync(binary + '.tmp'); } catch (_) {} }).then(function () { job = null; });

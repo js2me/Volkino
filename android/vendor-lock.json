@@ -1,0 +1,26 @@
+{
+  "node.zip": {
+    "url": "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip",
+    "sha256": "bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af"
+  },
+  "NODE-LICENSE": {
+    "url": "https://raw.githubusercontent.com/nodejs-mobile/nodejs-mobile/v18.20.4/LICENSE",
+    "sha256": "66233b87054d6bca9b0c2f23b027bb2caf1ebd961a6f981616d098dade33af34"
+  },
+  "TORRSERVER-LICENSE": {
+    "url": "https://raw.githubusercontent.com/YouROK/TorrServer/MatriX.147.2/LICENSE",
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  "TorrServer-android-arm7": {
+    "url": "https://github.com/YouROK/TorrServer/releases/download/MatriX.147.2/TorrServer-android-arm7",
+    "sha256": "be10bc7d073487fafc8d076774c4dabf517d13740f8c638aac920093fd7898cc"
+  },
+  "TorrServer-android-arm64": {
+    "url": "https://github.com/YouROK/TorrServer/releases/download/MatriX.147.2/TorrServer-android-arm64",
+    "sha256": "52e365deb5e80d97b31fe67cc04a269cc7e750b906c42d28cee735d95bbbd02c"
+  },
+  "TorrServer-android-amd64": {
+    "url": "https://github.com/YouROK/TorrServer/releases/download/MatriX.147.2/TorrServer-android-amd64",
+    "sha256": "1a77717d960067c4c451494f3423aa31101d6deb7874d502ff5758e24cfbeb4b"
+  }
+}

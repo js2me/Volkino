@@ -1,6 +1,6 @@
 {
   "name": "volkino",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "A remote-friendly webOS torrent search and TorrServer player",
   "scripts": {
@@ -12,7 +12,9 @@
     "build:ui": "vite build",
     "test:ui": "npm run build:ui && playwright test",
     "dev": "vite",
-    "dev:mock": "vite"
+    "dev:mock": "vite",
+    "build:android": "npm run build:ui && node scripts/android.mjs",
+    "build:android:release": "npm run build:ui && node scripts/android.mjs --release"
   },
   "engines": {
     "node": ">=8.12"

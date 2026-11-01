@@ -1,20 +1,26 @@
-/* Navy, teal and ice tones from the VolKino wolf-and-moon logo. */
+/* Charcoal surfaces with warm focus, violet series and mint status accents. */
 :root {
-  --color-bg: #030e23;
-  --color-sidebar: #041329;
-  --color-surface: #081e36;
-  --color-surface-raised: #0c2b46;
-  --color-surface-active: #0a3548;
-  --color-glow: #073449;
-  --color-border: #16435b;
-  --color-border-strong: #28617a;
-  --color-accent: #63e8ef;
-  --color-accent-bright: #a1f5fb;
-  --color-text: #ecfbff;
-  --color-text-secondary: #a1c4d7;
-  --color-text-muted: #779fb5;
-  --color-ink: #031a2b;
-  --color-focus-ring: rgba(99, 232, 239, .2);
-  --color-error: #ffb4a5;
-  --color-warning: #ddac54;
+  --color-bg: #101116;
+  --color-sidebar: #14151d;
+  --color-surface: #1c1e28;
+  --color-surface-raised: #292b38;
+  --color-surface-active: #363024;
+  --color-glow: #292036;
+  --color-border: #333542;
+  --color-border-strong: #4b4d60;
+  --color-accent: #f4bd68;
+  --color-accent-bright: #ffda9e;
+  --color-text: #f5f2ed;
+  --color-text-secondary: #c3c1cb;
+  --color-text-muted: #a09dab;
+  --color-ink: #21180d;
+  --color-focus-ring: rgba(244, 189, 104, .24);
+  --color-error: #ff9f9c;
+  --color-warning: #f4bd68;
+  --color-success: #88dbb5;
+  --color-success-surface: #203a32;
+  --color-series: #c5afff;
+  --color-series-surface: #30283f;
+  --color-movie-surface: #3b3022;
+  --color-brand: #63e8ef;
 }

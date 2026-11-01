@@ -16,3 +16,15 @@ app/catalog.js
 app/catalog.css
 test-results/
 playwright-report/
+
+# Android SDK paths, downloaded runtimes and generated builds
+android/.gradle/
+android/.cxx/
+android/local.properties
+android/vendor/
+android/app/build/
+android/app/.cxx/
+android/app/src/main/res/drawable/icon.png
+*.keystore
+*.jks
+android/build/

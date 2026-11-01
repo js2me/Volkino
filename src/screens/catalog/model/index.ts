@@ -14,6 +14,8 @@ export class CatalogVM extends ViewModelBase<Payload> {
   data: CatalogData | null = null;
   loading = false;
   error = '';
+  loadingMore = false;
+  moreError = '';
   focusRevision = 0;
   focusTarget: 'filters' | 'results' | 'restore' = 'filters';
   private request = 0;
@@ -32,7 +34,9 @@ export class CatalogVM extends ViewModelBase<Payload> {
       summary: computed,
       setFilter: action,
       apply: action,
-      page: action,
+      loadMore: action,
+      loadingMore: observable,
+      moreError: observable,
       load: action,
       start: action,
     });
@@ -42,7 +46,7 @@ export class CatalogVM extends ViewModelBase<Payload> {
     if (!this.data) return '';
     const { filters: f, items, genres, stale } = this.data;
     const genre = genres[f.type].find(g => g.id === f.genre);
-    return `${f.type === 'tv' ? 'Сериалы' : 'Фильмы'} · ${genre?.name || 'Все жанры'} · ${f.minRating ? 'рейтинг от ' + f.minRating : 'Любой рейтинг'} · ${f.year || 'Все годы'} · ${sortNames[f.sort]} · ${items.length} на странице${stale ? ' · сохранённая подборка' : ''}`;
+    return `${f.type === 'tv' ? 'Сериалы' : 'Фильмы'} · ${genre?.name || 'Все жанры'} · ${f.minRating ? 'рейтинг от ' + f.minRating : 'Любой рейтинг'} · ${f.year || 'Все годы'} · ${sortNames[f.sort]} · ${items.length} загружено${stale ? ' · сохранённая подборка' : ''}`;
   }
 
   get selectedId() {
@@ -83,21 +87,15 @@ export class CatalogVM extends ViewModelBase<Payload> {
     this.load(true);
   }
 
-  page(page: number) {
-    if (!this.data) return;
-    this.payload.globals.catalog.filters = { ...this.data.filters, page };
-    this.draft = { ...this.payload.globals.catalog.filters };
-    this.resetSelection();
-    this.load(true);
-  }
-
   private resetSelection() {
     Object.assign(this.payload.globals.catalog, { data: null, selectedId: null, scroll: 0 });
   }
 
   load(focus = true) {
     const request = ++this.request;
-    const f = this.payload.globals.catalog.filters;
+    const f = { ...this.payload.globals.catalog.filters, page: 1 };
+    this.payload.globals.catalog.filters = f;
+    this.loadingMore = false; this.moreError = '';
     this.loading = true;
     this.error = '';
     this.data = null;
@@ -117,6 +115,27 @@ export class CatalogVM extends ViewModelBase<Payload> {
           this.focusTarget = this.payload.globals.catalog.selectedId ? 'restore' : 'results';
           this.focusRevision++;
         }
+      });
+    });
+  }
+
+  loadMore() {
+    if (this.loading || this.loadingMore || !this.data?.hasMore) return;
+    const previous = this.data;
+    const request = ++this.request;
+    const filters = { ...previous.filters, page: previous.filters.page + 1 };
+    const query = (Object.keys(filters) as (keyof Filters)[])
+      .map(key => `${key}=${encodeURIComponent(filters[key])}`).join('&');
+    this.loadingMore = true; this.moreError = '';
+    this.payload.bridge.api('catalog/browse?' + query, null, (error, data) => {
+      if (request !== this.request || this.unmountSignal.aborted) return;
+      runInAction(() => {
+        this.loadingMore = false;
+        if (error) { this.moreError = error.message; return; }
+        const seen = new Set(previous.items.map(item => item.id));
+        const added = data.items.filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
+        this.data = { ...data, items: [...previous.items, ...added], hasMore: data.hasMore && added.length > 0 };
+        Object.assign(this.payload.globals.catalog, { data: this.data, filters: data.filters, genres: data.genres });
       });
     });
   }

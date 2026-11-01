@@ -6,6 +6,8 @@ const {spawn}=require('node:child_process');
 const {once}=require('node:events');
 const local=require('../server/local-torrserver');
 const release=require('../server/torrserver-release.json');
+// Do not reuse sockets across intentional helper shutdown/restarts.
+function request(url,options={}){return fetch(url,{...options,headers:{...options.headers,Connection:'close'}});}
 async function freePort(){const s=http.createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const p=s.address().port;await new Promise(r=>s.close(r));return p;}
 async function until(fn){for(let i=0;i<100;i++){if(await fn())return;await new Promise(r=>setTimeout(r,50));}throw new Error('Timed out');}
 function fixture(dir){
@@ -37,17 +39,17 @@ test('managed local server switches proxy, preserves external secrets, autostart
   const port=await freePort(),tsPort=await freePort(),cfg=path.join(dir,'config.json');
   fs.writeFileSync(cfg,JSON.stringify({torrserverUrl:'http://192.0.2.1:8090',torrserverUsername:'external',torrserverPassword:'secret'}));
   let child,token;const base='http://127.0.0.1:'+port;
-  async function launch(){child=spawn(process.execPath,['server/index.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,PORT:String(port),TW_CONFIG:cfg,TW_TORRSERVER_PORT:String(tsPort),TORRSERVER_URL:''},stdio:['ignore','pipe','pipe']});await once(child.stdout,'data');token=(await(await fetch(base+'/api/session')).json()).token;}
-  async function api(route,data){const res=await fetch(base+'/api/'+route,{method:data?'POST':'GET',headers:{'X-App-Token':token,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const value=await res.json();assert.equal(res.status,200,JSON.stringify(value));return value;}
+  async function launch(){child=spawn(process.execPath,['server/index.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,PORT:String(port),TW_CONFIG:cfg,TW_TORRSERVER_PORT:String(tsPort),TORRSERVER_URL:''},stdio:['ignore','pipe','pipe']});await once(child.stdout,'data');token=(await(await request(base+'/api/session')).json()).token;}
+  async function api(route,data){const res=await request(base+'/api/'+route,{method:data?'POST':'GET',headers:{'X-App-Token':token,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const value=await res.json();assert.equal(res.status,200,JSON.stringify(value));return value;}
   async function close(){if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}}
   try{
-    await launch();assert.equal((await fetch(base+'/api/local-server/start',{method:'POST'})).status,403);
+    await launch();assert.equal((await request(base+'/api/local-server/start',{method:'POST'})).status,403);
     await api('local-server/start',{});await api('local-server/start',{});
     await until(async()=>{const s=await api('local-server');assert.notEqual(s.state,'error',s.error);return s.state==='running';});
     await until(async()=>(await api('config')).torrserverMode==='local');
     const conf=await api('config');assert.equal(conf.torrserverUrl,'http://192.0.2.1:8090');assert.equal(conf.torrserverPassword,undefined);
     assert.equal((await api('health')).version,'MatriX.fixture');
-    const stream=await fetch(base+'/stream?hash=0123456789abcdef0123456789abcdef01234567&index=1',{headers:{Range:'bytes=0-3'}});assert.equal(stream.status,206);assert.equal(await stream.text(),'DATA');
+    const stream=await request(base+'/stream?hash=0123456789abcdef0123456789abcdef01234567&index=1',{headers:{Range:'bytes=0-3'}});assert.equal(stream.status,206);assert.equal(await stream.text(),'DATA');
     const settings=JSON.parse(fs.readFileSync(path.join(dir,'torrserver/data/settings.json'))).BitTorr;assert.equal(settings.CacheSize,32*1024*1024);assert.equal(settings.UseDisk,false);
     const pid=Number(fs.readFileSync(path.join(dir,'torrserver/data/pid')));
     await close();await until(()=>{try{process.kill(pid,0);return false;}catch(_){return true;}});

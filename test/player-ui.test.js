@@ -24,8 +24,8 @@ function boot(saved=[]){
   function node(id,parent=body,tag='div'){const el=parent.appendChild(new Element(tag));el.id=id;elements[id]=el;return el;}
   node('content');node('main');node('page-title');node('toast');node('connection-light');node('connection-text');
   const player=node('player'),video=node('video',player,'video');
-  for(const id of ['player-top','player-controls','playing-title','playing-status','player-time','player-progress'])node(id,player);
-  node('player-back',player,'button');node('player-timeline',player);const episodes=node('player-episodes',player);node('episode-list',episodes);
+  for(const id of ['player-options','player-top','player-controls','playing-title','playing-status','player-time','player-progress'])node(id,player);
+  for(const id of ['player-audio','player-fit','player-options-close','touch-exit','touch-rewind','touch-forward','touch-pause','touch-episodes','touch-audio','player-back'])node(id,player,'button');['player-audio','player-fit','player-options-close'].forEach(id=>elements['player-options'].appendChild(elements[id]));node('player-timeline',player);const episodes=node('player-episodes',player);node('episode-list',episodes);
   document={body,activeElement:body,createElement:t=>new Element(t),createTextNode(text){const e=new Element();e.textContent=text;return e;},getElementById(id){if(elements[id])return elements[id];let found=null;function walk(e){if(e.id===id)found=e;e.children.forEach(walk);}walk(body);return found;},querySelectorAll:s=>body.querySelectorAll(s),addEventListener:body.addEventListener.bind(body)};
   Object.assign(video,{readyState:0,paused:true,seeking:false,duration:NaN,currentTime:0,load(){this.readyState=0;this.duration=NaN;this.currentTime=0;},pause(){this.paused=true;this.emit('pause');},play(){this.paused=false;return Promise.resolve();}});
   function later(fn,ms){tasks.set(++nextId,{fn,at:clock+ms});return nextId;}
@@ -63,9 +63,9 @@ test('Down shows only sibling episodes; arrows select without seeking; OK saves 
   h.advance(100);h.ready(0,'loadedmetadata');assert.equal(h.video.currentTime,300);h.advance(5000);assert.equal(h.state.playing.file.id,2);
   h.stopPlayer();assert.equal(h.document.activeElement,returnFocus);
 });
-test('episode picker auto hides; Back closes picker before leaving video and Up hides controls immediately',()=>{
+test('episode picker auto hides; Back closes picker and settings before leaving video',()=>{
   const h=boot();h.play();h.key(40);h.advance(5000);assert.equal(h.state.episodesOpen,false);assert.equal(h.elements['player-controls'].className,'hidden');assert.equal(h.document.activeElement,h.video);
-  h.key(40);h.key(461);assert.ok(h.state.playing);assert.equal(h.state.episodesOpen,false);h.key(38);assert.equal(h.elements['player-controls'].className,'hidden');h.key(461);assert.equal(h.state.playing,null);
+  h.key(40);h.key(461);assert.ok(h.state.playing);assert.equal(h.state.episodesOpen,false);h.key(38);assert.equal(h.state.optionsOpen,true);h.key(461);assert.ok(h.state.playing);assert.equal(h.state.optionsOpen,false);h.key(461);assert.equal(h.state.playing,null);
 });
 test('file cards show unwatched, partial and complete progress and ended marks the current file complete',()=>{
   const h=boot([item(1,250),item(2,960)]);h.renderFiles();const fills=h.elements.content.querySelectorAll('.file-watch-fill');assert.deepEqual(fills.map(x=>x.style.width),['25%','100%','0%']);
@@ -104,4 +104,33 @@ test('player arrows and media keys use the configured seek step, defaulting to 3
       h.advance(250);assert.equal(h.video.currentTime,100+direction*step);
     }
   }
+});
+
+test('Up opens settings without pausing; unavailable audio is skipped and fit modes cycle without seeking',()=>{
+  const h=boot();h.play();h.advance(5000);h.key(38);
+  assert.equal(h.state.optionsOpen,true);assert.equal(h.elements['player-options'].className,'');
+  assert.equal(h.elements['player-audio'].disabled,true);assert.equal(h.document.activeElement,h.elements['player-fit']);
+  h.advance(10000);assert.equal(h.state.optionsOpen,true);assert.equal(h.video.paused,false);
+  for(const mode of ['cover','fill','contain']){h.key(13);assert.equal(h.video.style.objectFit,mode);}
+  assert.equal(h.seekControl.target(),null);h.key(39);assert.equal(h.document.activeElement,h.elements['player-options-close']);
+  h.key(13);assert.equal(h.state.optionsOpen,false);assert.equal(h.document.activeElement,h.video);
+  h.advance(5000);assert.equal(h.elements['player-controls'].className,'hidden');
+});
+
+test('settings switch exposed audio tracks and wrap; Back closes settings before exiting playback',()=>{
+  const h=boot();h.play();h.video.audioTracks=[{label:'Русский',enabled:true},{language:'en',enabled:false}];h.key(38);
+  assert.equal(h.document.activeElement,h.elements['player-audio']);assert.match(h.elements['player-audio'].textContent,/Русский/);
+  h.key(13);assert.deepEqual(h.video.audioTracks.map(t=>t.enabled),[false,true]);assert.match(h.elements['player-audio'].textContent,/en/);
+  h.key(13);assert.deepEqual(h.video.audioTracks.map(t=>t.enabled),[true,false]);
+  h.key(39);assert.equal(h.document.activeElement,h.elements['player-fit']);h.key(13);assert.equal(h.video.style.objectFit,'cover');
+  h.key(40);assert.equal(h.state.optionsOpen,false);assert.equal(h.state.episodesOpen,false);
+  h.key(38);h.key(461);assert.ok(h.state.playing);h.key(461);assert.equal(h.state.playing,null);
+  h.play();assert.equal(h.state.optionsOpen,false);h.key(38);assert.match(h.elements['player-fit'].textContent,/обрезкой/);
+});
+
+test('settings close when changing episodes and audio track errors keep playback running',()=>{
+ const h=boot();h.play();h.video.audioTracks=[{enabled:true},{get enabled(){return false;},set enabled(v){throw Error('unsupported');}}];
+ h.key(38);h.key(13);assert.ok(h.state.playing);assert.match(h.elements.toast.textContent,/не поддерживает/);
+ h.elements['touch-episodes'].click();assert.equal(h.state.optionsOpen,false);assert.equal(h.state.episodesOpen,true);
+ h.key(39);h.key(13);assert.equal(h.state.playing.file.id,2);assert.equal(h.state.optionsOpen,false);
 });

@@ -15,6 +15,13 @@ export class Globals {
           viewModels: { useDecorators: false },
           viewModelStores: { useDecorators: false },
         },
+        resource: {
+          read:() => {
+            return {
+              globals: this,
+            }
+          }
+        }
       },
     }),
   };

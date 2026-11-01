@@ -7,6 +7,8 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
   data: LatestPage | null = null;
   loading = false;
   error = '';
+  loadingMore = false;
+  moreError = '';
   focusRevision = 0;
   private request = 0;
   selected: LatestItem | null = null;
@@ -20,7 +22,8 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
   constructor(params: ViewModelParams<{ globals: Globals; bridge: LatestBridge }>) {
     super(params);
     makeObservable(this, { data: observable.ref, loading: observable, error: observable,
-      focusRevision: observable, load: action, page: action, select: action,
+      focusRevision: observable, load: action, loadMore: action, select: action,
+      loadingMore: observable, moreError: observable,
       selected: observable.ref, details: observable.ref, detailsLoading: observable, detailsError: observable });
   }
 
@@ -35,12 +38,9 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
     } else this.load(true);
   }
 
-  page(page: number) {
-    Object.assign(this.session, { page, selectedId: null, scroll: 0 });
-    this.load(true);
-  }
-
   load(focusResults = false, refresh = false) {
+    Object.assign(this.session, { page: 1, selectedId: null, scroll: 0, data: null });
+    this.loadingMore = false; this.moreError = '';
     const request = ++this.request;
     this.loading = true; this.error = ''; this.data = null;
     this.select();
@@ -54,6 +54,24 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
           this.select(data.items.find(item => item.id === this.session.selectedId) || data.items[0]);
         }
         if (focusResults || this.session.selectedId) this.focusRevision++;
+      });
+    });
+  }
+
+  loadMore() {
+    if (this.loading || this.loadingMore || !this.data?.hasMore) return;
+    const previous = this.data;
+    const request = ++this.request;
+    this.loadingMore = true; this.moreError = '';
+    this.payload.bridge.api(`latest?page=${previous.page + 1}`, null, (error, data) => {
+      if (request !== this.request || this.unmountSignal.aborted) return;
+      runInAction(() => {
+        this.loadingMore = false;
+        if (error) { this.moreError = error.message; return; }
+        const seen = new Set(previous.items.map(item => item.id));
+        const added = data.items.filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
+        this.data = { ...data, items: [...previous.items, ...added], hasMore: data.hasMore && added.length > 0 };
+        Object.assign(this.session, { data: this.data, page: data.page });
       });
     });
   }

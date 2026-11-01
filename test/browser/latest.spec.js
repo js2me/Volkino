@@ -33,22 +33,21 @@ test('latest is Filmix-only, shows films and series and refreshes upstream', asy
   expect(errors).toEqual([]);
 });
 
-test('Filmix latest paginates, opens playback files directly and restores selection on BACK', async ({ page }) => {
+test('Filmix latest appends on scroll, opens playback files directly and restores selection on BACK', async ({ page }) => {
   let requests = 0;
   page.on('request', request => { if (request.url().includes('/api/latest?')) requests++; });
   await open(page);
   await expect(page.locator('.latest-row')).toHaveCount(50);
-  await page.getByRole('button', { name: 'Следующая →' }).first().click();
-  await expect(page.locator('.catalog-pagination').first()).toContainText('Страница 2');
-  await expect(page.locator('.latest-row')).toHaveCount(50);
-  const selected = page.locator('.latest-row').nth(10);
+  await page.locator('.latest-list').evaluate(list => { list.scrollTop = list.scrollHeight; });
+  await expect(page.locator('.latest-row')).toHaveCount(100);
+  const selected = page.locator('.latest-row').nth(60);
   await selected.focus();const id = await selected.getAttribute('data-latest-id');
   await page.keyboard.press('Enter');
   await expect(page.locator('#filmix-voice')).toBeVisible();
   await expect(page.locator('.file-card').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator(`[data-latest-id="${id}"]`)).toBeFocused();
-  await expect(page.locator('.catalog-pagination').first()).toContainText('Страница 2');
+  await expect(page.locator('.latest-row')).toHaveCount(100);
   expect(requests).toBe(2);
 });
 

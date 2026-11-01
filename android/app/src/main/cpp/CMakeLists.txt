@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(volkino)
+add_library(node SHARED IMPORTED)
+set_target_properties(node PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/../../../../vendor/node/bin/${ANDROID_ABI}/libnode.so)
+add_library(volkino SHARED runtime.cpp)
+target_include_directories(volkino PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../../vendor/node/include/node)
+target_link_libraries(volkino node log)

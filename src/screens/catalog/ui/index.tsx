@@ -1,7 +1,7 @@
 import { For, Show, createEffect } from 'solid-js';
 import { useViewModel, withViewModel } from 'mobx-view-model-solid';
 import { CatalogVM } from '../model';
-import { Pagination as PageNavigation } from '../../../app/ui/pagination';
+import { InfiniteScroll } from '../../../app/ui/infinite-scroll';
 import { Field } from '../../../app/ui/field';
 import { type Filters, sortNames } from '../../../globals/catalog';
 
@@ -26,7 +26,7 @@ export const Catalog = withViewModel(CatalogVM, () => {
       if (target !== 'filters') main().scrollTop = target === 'restore' ? model.scroll : 0;
     });
   });
-  const Pagination = () => <Show when={model.data}>{data => <PageNavigation page={data().filters.page} hasMore={data().hasMore} onPage={page => model.page(page)} />}</Show>;
+
 
   return <div ref={root}>
     <form class="catalog-filters" onSubmit={event => { event.preventDefault(); model.apply(); }}>
@@ -60,25 +60,25 @@ export const Catalog = withViewModel(CatalogVM, () => {
       <button id="catalog-apply" type="submit" class="btn primary">Показать</button>
     </form>
     <p class="muted">Стрелки — переход между полями · OK — выбрать значение. Нажмите «Показать», чтобы применить фильтры. Сортировка — в пределах страницы.</p>
-    <div id="catalog-results" aria-busy={model.loading}>
+    <div id="catalog-results" aria-busy={model.loading || model.loadingMore}>
       <Show when={model.loading}><p class="muted">Загружаем каталог…</p></Show>
       <Show when={model.error}><p class="error-text">{model.error}</p><button class="btn" onClick={() => model.load()}>Повторить</button></Show>
       <Show when={model.data}>{data => <>
         <div class="catalog-summary">{model.summary}</div>
-        <Pagination />
         <Show when={!data().items.length}><p class="muted">По этим фильтрам ничего не найдено. Попробуйте другой год, жанр или уменьшите рейтинг.</p></Show>
         <div class="catalog-grid">
-          <For each={data().items}>{item => <button class="poster-card" data-catalog-id={item.id} aria-label={item.title + (item.year ? ' · ' + item.year : '')} onClick={() => model.open(item, main().scrollTop)}>
+          <For each={data().items}>{(item, index) => <button class="poster-card" data-media-type={item.type} onFocus={() => { if (index() >= data().items.length - 3 && !model.moreError) model.loadMore(); }} data-catalog-id={item.id} aria-label={item.title + (item.year ? ' · ' + item.year : '')} onClick={() => model.open(item, main().scrollTop)}>
             <div class="poster-art">
               <span class="poster-fallback">{item.title.slice(0, 1)}</span>
               <Show when={item.poster}><img alt="" src={item.poster} loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /></Show>
-              <Show when={item.rating}><span class="poster-rating">{item.rating}</span></Show>
+              <Show when={item.rating}><span class="poster-rating" classList={{ 'rating-high': Number(item.rating) >= 8 }}>{item.rating}</span></Show>
             </div>
             <span class="poster-name">{item.title}</span>
             <span class="poster-meta">{item.year || ''}{item.type === 'tv' ? ' · Сериал' : ' · Фильм'}</span>
           </button>}</For>
         </div>
-        <Show when={data().items.length}><Pagination /></Show>
+        <InfiniteScroll root={main} count={data().items.length} hasMore={data().hasMore}
+          loading={model.loadingMore} error={model.moreError} onMore={() => model.loadMore()} />
       </>}</Show>
     </div>
   </div>;

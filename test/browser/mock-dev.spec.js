@@ -12,8 +12,8 @@ test('local dev runs offline: home, catalog, torrents, video, episodes and histo
   await expect.poll(() => page.locator('.poster-art img').first().evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Каталог', exact: true }).click();
   await expect(page.locator('#catalog-results .poster-card')).toHaveCount(36);
-  await page.getByRole('button', { name: 'Следующая →' }).first().click();
-  await expect(page.locator('.catalog-pagination').first()).toContainText('Страница 2');
+  await page.locator('#main').evaluate(main => { main.scrollTop = main.scrollHeight; });
+  await expect(page.locator('#catalog-results .poster-card')).toHaveCount(72);
   await page.locator('.poster-card').first().click();
   await expect(page.locator('.movie-description')).toContainText('Демонстрационная история');
   await expect(page.locator('.detail-torrents .torrent')).toHaveCount(3);
@@ -61,6 +61,9 @@ test('mock Filmix has series, voices and seasons; settings stay in memory', asyn
   await expect(page.locator('.home-section').first()).toBeVisible();
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await expect(page.locator('#ts-url')).toHaveValue('http://demo-only:8090');
+  const transport = await page.locator('#filmix-transport').elementHandle();
+  await page.locator('#filmix-transport').selectOption('mobile');
+  await expect.poll(() => transport.evaluate(element => element.isConnected)).toBe(false);
   await page.getByRole('button', { name: 'Получить код Filmix', exact: true }).click();
   await expect(page.locator('#filmix-status')).toContainText('DEMO-1234');
   await page.getByRole('button', { name: 'Я ввёл код', exact: true }).click();

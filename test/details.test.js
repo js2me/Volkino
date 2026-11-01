@@ -13,7 +13,7 @@ function boot(){
   querySelector(s){return this.querySelectorAll(s)[0]||null;}
  }
  const body=new Element('body'),main=body.appendChild(new Element()),content=main.appendChild(new Element());main.id='main';content.id='content';
- for(const id of ['page-title','video','player','player-back','player-timeline','connection-light','connection-text']){const e=body.appendChild(new Element());e.id=id;}
+ for(const id of ['player-audio','player-fit','player-options-close','touch-exit','touch-rewind','touch-forward','touch-pause','touch-episodes','touch-audio','page-title','video','player','player-back','player-timeline','connection-light','connection-text']){const e=body.appendChild(new Element());e.id=id;}
  document={body,activeElement:body,createElement:t=>new Element(t),createTextNode:t=>{const e=new Element();e.textContent=t;return e;},addEventListener(){},querySelectorAll:s=>body.querySelectorAll(s),getElementById(id){let found=null;function walk(e){if(e.id===id)found=e;e.children.forEach(walk);}walk(body);return found;}};
  function XHR(){}XHR.prototype.open=function(method,url){this.url=url;};XHR.prototype.setRequestHeader=function(){};XHR.prototype.send=function(){requests.push(this);};
  const window={addEventListener(){}};

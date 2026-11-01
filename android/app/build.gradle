@@ -1,0 +1,35 @@
+plugins { id 'com.android.application' }
+def pkg = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+android {
+    namespace 'org.torrenter.watcher'
+    compileSdk 35
+    ndkVersion '27.2.12479018'
+    defaultConfig {
+        applicationId 'org.torrenter.watcher'
+        minSdk 23
+        targetSdk 35
+        versionCode 700
+        versionName pkg.version
+        ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
+        externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', '-DANDROID_STL=c++_shared'; cppFlags '-std=c++17' } }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig true }
+    externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
+    sourceSets { main { assets.srcDirs = ['build/generated/assets']; jniLibs.srcDirs = ['build/generated/jniLibs'] } }
+    packaging { jniLibs { useLegacyPackaging true; keepDebugSymbols += ['**/libnode.so', '**/libtorrserver.so'] } }
+    buildTypes { release { minifyEnabled false } }
+}
+
+// Keep Android Studio and command-line builds in sync with the webOS UI and helper.
+def buildUi = tasks.register('buildVolkinoUi', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine 'npm', 'run', 'build:ui'
+}
+def prepareRuntime = tasks.register('prepareVolkinoRuntime', Exec) {
+    dependsOn buildUi
+    workingDir rootProject.projectDir.parentFile
+    commandLine 'node', 'scripts/android.mjs', '--prepare'
+}
+tasks.named('preBuild').configure { dependsOn prepareRuntime }
+tasks.configureEach { if (name.startsWith('configureCMake')) dependsOn prepareRuntime }

@@ -6,7 +6,7 @@ function browse(url) {
   const query = new URL(url).searchParams;
   return {
     filters: { type: query.get('type'), genre: query.get('genre'), minRating: Number(query.get('minRating')), year: query.get('year'), sort: query.get('sort'), page: Number(query.get('page')) },
-    items, genres, hasMore: query.get('page') === '1', updatedAt: Date.now(),
+    items: items.map(item => ({ ...item, id: query.get('page') === '1' ? item.id : item.id + ':page' + query.get('page') })), genres, hasMore: query.get('page') === '1', updatedAt: Date.now(),
   };
 }
 
@@ -35,7 +35,7 @@ async function openCatalog(page) {
   await expect(page.locator('.poster-card')).toHaveCount(36);
 }
 
-test('MobX updates filters, applies on OK, resets type-specific genre and paginates', async ({ page }) => {
+test('MobX updates filters, applies on OK, resets type-specific genre and appends on scroll', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await openCatalog(page);
@@ -56,13 +56,12 @@ test('MobX updates filters, applies on OK, resets type-specific genre and pagina
   expect(Object.fromEntries(query)).toEqual({ type: 'tv', genre: '10765', minRating: '7', year: '2024', sort: 'rating', page: '1' });
   await expect(page.locator('.catalog-summary')).toContainText('Сериалы · Фантастика · рейтинг от 7 · 2024 · По рейтингу');
   await expect(page.locator('.poster-card').first()).toBeFocused();
-  await page.getByRole('button', { name: 'Следующая →' }).first().click();
-  await expect(page.locator('.catalog-pagination').first()).toContainText('Страница 2');
+  await page.locator('#main').evaluate(main => { main.scrollTop = main.scrollHeight; });
+  await expect(page.locator('.poster-card')).toHaveCount(72);
   await expect(page.locator('#catalog-year')).toHaveValue('2024');
   await expect(page.locator('#catalog-genre')).toHaveValue('10765');
-  await expect(page.getByRole('button', { name: 'Следующая →' })).toHaveCount(0);
-  await page.getByRole('button', { name: '← Предыдущая' }).first().click();
-  await expect(page.locator('.catalog-pagination').first()).toContainText('Страница 1');
+  await expect(page.locator('.infinite-scroll-status')).toContainText('Всё загружено');
+  await expect(page.locator('.catalog-pagination')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -82,7 +81,7 @@ test('BACK restores the cached page, selected card and scroll; arrows move remot
   await page.keyboard.press('Escape');
   await expect(selected).toBeFocused();
   expect(await page.locator('#main').evaluate(main => main.scrollTop)).toBe(scroll);
-  expect(requests).toBe(1);
+  expect(requests).toBe(2);
 });
 
 test('failed requests can retry; an unmounted or superseded request cannot overwrite the screen', async ({ page }) => {
