@@ -306,7 +306,8 @@
         clearTimeout(state.playerDeadline);clearTimeout(state.playerTimer);
         current.nativeToken=String(current.started)+':'+file.id;
         current.nativePlayback={currentTime:state.resume||0,duration:0};
-        try{window.TWNativePlayer.play(url,file.path.split('/').pop(),state.resume||0,seekStep(),current.nativeToken);}
+        var episodes=state.files.filter(function(f){return fileFolder(f)===fileFolder(file);}).map(function(f){return {id:f.id,title:f.path.replace(/\\/g,'/').split('/').pop(),current:Number(f.id)===Number(file.id)};});
+        try{window.TWNativePlayer.play(url,file.path.split('/').pop(),state.resume||0,seekStep(),current.nativeToken,JSON.stringify(episodes));}
         catch(e){stopPlayer();toast('Не удалось открыть Android-плеер: '+e.message);}
         return;
       }
@@ -322,7 +323,11 @@
     var current=state.playing;if(!current||current.nativeToken!==result.token)return;
     current.nativePlayback={currentTime:result.position,duration:result.duration};
     updateHistory(false,result.completed);
-    if(result.closed){stopPlayer();if(result.error)toast(result.error);}
+    if(result.closed){
+      var next=typeof result.nextFileId==='number'?state.files.filter(function(f){return Number(f.id)===result.nextFileId;})[0]:null;
+      stopPlayer();if(result.error)toast(result.error);
+      if(next){var previous=watchedFile(next);playFile(next,previous&&!previous.completed?previous.position:0);}
+    }
   };
   function setAudioStatus(text){var label=$('audio-mode-status');if(label)label.textContent=text;}
   function resetAudioVideo(){

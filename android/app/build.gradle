@@ -8,7 +8,7 @@ android {
         applicationId 'org.torrenter.watcher'
         minSdk 23
         targetSdk 35
-        versionCode 703
+        versionCode 704
         versionName pkg.version
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', '-DANDROID_STL=c++_shared'; cppFlags '-std=c++17' } }

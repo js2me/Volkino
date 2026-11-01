@@ -25,6 +25,7 @@ public final class MainActivity extends Activity {
                 result.put("duration", data.getDoubleExtra("duration", 0));
                 result.put("closed", data.getBooleanExtra("closed", false));
                 result.put("completed", data.getBooleanExtra("completed", false));
+                if (data.hasExtra("nextFileId")) result.put("nextFileId", data.getLongExtra("nextFileId", -1));
                 result.put("error", data.getStringExtra("error"));
             } catch (org.json.JSONException ignored) { return; }
             web.evaluateJavascript("window.TWAndroidPlayback && window.TWAndroidPlayback(" + result + ")", null);
@@ -67,7 +68,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(playerUpdates, updates, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(playerUpdates, updates);
         web.addJavascriptInterface(new Object() {
-            @JavascriptInterface public void play(String path, String title, double position, int step, String token) {
+            @JavascriptInterface public void play(String path, String title, double position, int step, String token, String episodes) {
                 handler.post(() -> {
                     if (destroyed || !loaded || !local(Uri.parse(web.getUrl()))) return;
                     Uri uri = Uri.parse(path);
@@ -76,7 +77,7 @@ public final class MainActivity extends Activity {
                     Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
                     intent.putExtra("url", origin + path); intent.putExtra("title", title);
                     intent.putExtra("position", (long)(Math.max(0, position) * 1000));
-                    intent.putExtra("step", step); intent.putExtra("token", token);
+                    intent.putExtra("step", step); intent.putExtra("token", token); intent.putExtra("episodes", episodes);
                     startActivity(intent);
                 });
             }

@@ -181,3 +181,16 @@ test('cancelling a touch drag restores the current position without seeking',()=
  assert.equal(h.video.currentTime,100);assert.equal(h.seekControl.target(),null);
  assert.equal(h.elements['player-progress'].style.width,'10%');
 });
+
+test('native episode picker receives siblings and switching saves progress before resuming the selected file',()=>{
+ const calls=[],h=boot([item(2,300)],{play(...args){calls.push(args);}});
+ h.playFile(files[0],0);h.advance(100);
+ const episodes=JSON.parse(calls[0][5]);
+ assert.equal(episodes.length,2);assert.equal(episodes[0].current,true);assert.equal(episodes[1].title,'Episode 02.mkv');
+ h.window.TWAndroidPlayback({token:calls[0][4],position:240,duration:1000,closed:true,nextFileId:2});
+ assert.equal(h.history().find(v=>v.fileId===1).position,240);
+ assert.equal(h.state.playing.file.id,2);assert.equal(h.state.resume,300);
+ h.advance(100);assert.equal(calls.length,2);assert.equal(calls[1][2],300);
+ h.window.TWAndroidPlayback({token:calls[0][4],position:999,duration:1000,closed:true,nextFileId:3});
+ assert.equal(h.state.playing.file.id,2);
+});
