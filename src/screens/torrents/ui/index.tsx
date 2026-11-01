@@ -19,7 +19,7 @@ export const Torrents = withViewModel(TorrentsVM, () => {
     <Show when={!model.loading && !model.error}>
       <Show when={model.items.length} fallback={<ScreenMessage title="Пока пусто" text="Найдите фильм через поиск или откройте magnet-ссылку." />}>
         <For each={model.items}>{(item, index) => <TorrentRow number={index() + 1} title={item.title || item.name || item.hash}
-          meta={[{ text: model.bridge.bytes(item.torrent_size) }, { text: item.stat_string }]} onOpen={() => model.bridge.open(item)} />}</For>
+          meta={[{ text: model.globals.app.bytes(item.torrent_size) }, { text: item.stat_string }]} onOpen={() => model.globals.app.openTorrent(item)} />}</For>
       </Show>
     </Show>
   </div>;

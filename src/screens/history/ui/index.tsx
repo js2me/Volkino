@@ -14,10 +14,10 @@ export const History = withViewModel(HistoryVM, () => {
   onMount(() => root.querySelector<HTMLButtonElement>('button')?.focus());
   return <div ref={root} class="history-screen">
     <Show when={model.items.length} fallback={<ScreenMessage title="История пока пуста" text="Откройте видео — сохраним его сразу. Здесь остаются последние 100 файлов и позиции просмотра." />}>
-      <p class="muted">{model.items.length} из {model.bridge.limit} · последние открытые видео · старые записи удаляются автоматически</p>
+      <p class="muted">{model.items.length} из {model.globals.app.historyLimit} · последние открытые видео · старые записи удаляются автоматически</p>
       <For each={model.items}>{(item, index) => <TorrentRow number={index() + 1} title={item.title}
-        meta={[{ text: item.position > 0 ? model.bridge.time(item.position) + ' / ' + model.bridge.time(item.duration) : 'Открыто · просмотр ещё не начат' }, { text: dateLabel(item.updated) }, { text: item.torrentTitle || item.fileName }]}
-        onOpen={() => model.bridge.resume(item)} />}</For>
+        meta={[{ text: item.position > 0 ? model.globals.app.time(item.position) + ' / ' + model.globals.app.time(item.duration) : 'Открыто · просмотр ещё не начат' }, { text: dateLabel(item.updated) }, { text: item.torrentTitle || item.fileName }]}
+        onOpen={() => model.globals.app.resume(item)} />}</For>
       <button class="btn" onClick={() => model.clear()}>Очистить историю</button>
     </Show>
   </div>;

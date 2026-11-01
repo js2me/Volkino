@@ -28,11 +28,6 @@ export interface CatalogData {
   updatedAt: number;
 }
 
-export interface CatalogBridge {
-  api(route: string, data: null, done: (error: Error | null, data: CatalogData) => void): void;
-  openItem(item: CatalogItem): void;
-}
-
 export interface CatalogSession {
   filters: Filters;
   genres: Genres;

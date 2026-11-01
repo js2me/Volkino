@@ -17,10 +17,6 @@ export interface LatestPage {
   updatedAt: number;
   stale?: boolean;
 }
-export interface LatestBridge {
-  api<T = LatestPage>(route: string, body: null, done: (error: Error | null, data: T) => void): void;
-  openFilmix(id: number, title: string): void;
-}
 export interface LatestDetails {
   id: number;
   title: string;

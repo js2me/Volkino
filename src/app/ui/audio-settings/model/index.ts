@@ -1,11 +1,11 @@
 import { action, makeObservable, observable } from 'mobx';
-import { ViewModelBase, type ViewModelParams } from 'mobx-view-model';
-import { audioProcessor } from '../../../audio/processor';
+import type { ViewModelParams } from 'mobx-view-model';
+import { VM } from '../../../../shared/lib/mobx';
 import type { AudioFixMode } from '../../../audio/graph';
 
-export class AudioSettingsVM extends ViewModelBase<{ mode: AudioFixMode }> {
+export class AudioSettingsVM extends VM<{ mode: AudioFixMode }> {
   mode: AudioFixMode;
-  readonly supported = audioProcessor.supported;
+  readonly supported = this.globals.audio.supported;
 
   constructor(params: ViewModelParams<{ mode: AudioFixMode }>) {
     super(params);

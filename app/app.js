@@ -7,6 +7,21 @@
   var disposeCatalog = null, disposeLatest = null, disposeAudioSettings = null, disposeScreen = null;
   var toastTimer, historyWarning=false, history = readHistory();
   var seekControl;
+  if(window.TWApp)window.TWApp.initialize({
+    api:api,state:state,history:function(){return history;},historyLimit:TWHistory.limit,
+    time:time,bytes:bytes,sizeNumber:sizeNumber,toast:toast,resume:resumeHistory,
+    clearHistory:function(){history=[];storeHistory();},
+    search:function(){state.searchFromDetail=false;change('search');},
+    openItem:function(item,origin){
+      state.detailOrigin=origin;
+      if(origin==='home'){state.homeScroll=$('main').scrollTop;state.lastHomeId=item.id;}
+      openDetails(item);
+    },
+    openFilmix:function(id,name){state.filmixOrigin='latest';state.searchFromDetail=false;openFilmix(id,name);},
+    filmix:searchFilmix,
+    openSearch:function(result){state.searchFromDetail=false;openTorrent(result.magnet,result.title);},
+    openTorrent:function(torrent){openTorrent('magnet:?xt=urn:btih:'+torrent.hash,torrent.title||torrent.name);}
+  });
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function readHistory() { try { return TWHistory.load(localStorage); } catch (_) { return []; } }
@@ -60,23 +75,13 @@
     if(src){var img=el('img');img.alt='';img.src=src;img.setAttribute('loading','lazy');img.onerror=function(){img.style.display='none';};wrap.appendChild(img);}parent.appendChild(wrap);return wrap;
   }
   function catalogView(){
-    disposeCatalog=window.TWCatalog.mount(content,{
-      api:api,
-      openItem:function(item){state.detailOrigin='catalog';openDetails(item);}
-    });
+    disposeCatalog=window.TWCatalog.mount(content);
   }
   function latestView(){
-    disposeLatest=window.TWLatest.mount(content,{
-      api:api,
-      openFilmix:function(id,name){state.filmixOrigin='latest';state.searchFromDetail=false;openFilmix(id,name);}
-    });
+    disposeLatest=window.TWLatest.mount(content);
   }
   function homeView(){
-    disposeScreen=window.TWHome.mount(content,{
-      api:api,session:state,history:history,time:time,resume:resumeHistory,
-      search:function(){state.searchFromDetail=false;change('search');},
-      openItem:function(item){state.detailOrigin='home';state.homeScroll=$('main').scrollTop;state.lastHomeId=item.id;openDetails(item);}
-    });
+    disposeScreen=window.TWHome.mount(content);
   }
   function openDetails(item){
     state.detailItem=item;state.searchFromDetail=true;state.query=item.searchTitle||item.title;state.results=[];state.detailScroll=0;state.detailTorrentIndex=0;change('details');renderDetails(item,true);var gen=state.generation;
@@ -102,10 +107,7 @@
     change('details');renderDetails(state.detailItem,false);renderSearchState();var rows=$('search-results').querySelectorAll('.torrent');if(rows.length)rows[Math.min(state.detailTorrentIndex,rows.length-1)].focus();$('main').scrollTop=state.detailScroll;
   }
   function searchView(){
-    disposeScreen=window.TWSearch.mount(content,{
-      api:api,session:state,bytes:bytes,sizeNumber:sizeNumber,toast:toast,filmix:searchFilmix,
-      open:function(result){state.searchFromDetail=false;openTorrent(result.magnet,result.title);}
-    });
+    disposeScreen=window.TWSearch.mount(content);
   }
   function renderSearchState(){
     var target=$('search-results');if(!target)return;target.innerHTML='';if(state.results.length){renderResults();return;}
@@ -249,16 +251,10 @@
   function refreshFileProgress(){Array.prototype.forEach.call(document.querySelectorAll('.file-watch-fill'),function(fill){var id=Number(fill.getAttribute('data-file-id')),file=state.files.filter(function(f){return Number(f.id)===id;})[0];if(file)setFileProgress(fill,fileProgress(file));});}
   function renderFiles(){content.innerHTML='';title.textContent=state.torrent.title||state.torrent.name||'Выберите файл';if(state.source==='filmix')filmixFilters();else content.appendChild(statsBar(state.torrent));content.appendChild(el('p','muted','Выберите видео. Плеер поддерживает перемотку, паузу и продолжение просмотра.'));state.files.forEach(function(f,i){var card=row(i+1,f.path,[{text:state.source==='filmix'?f.voice+' · '+f.qualities.join(' / ')+'p':bytes(f.length)}],function(){var h=watchedFile(f);playFile(f,h&&!h.completed?h.position:0);});card.className+=' file-card';appendFileProgress(card,f);content.appendChild(card);});focusFirst();}
   function torrentsView(){
-    disposeScreen=window.TWTorrents.mount(content,{
-      api:api,bytes:bytes,
-      open:function(torrent){openTorrent('magnet:?xt=urn:btih:'+torrent.hash,torrent.title||torrent.name);}
-    });
+    disposeScreen=window.TWTorrents.mount(content);
   }
   function historyView(){
-    disposeScreen=window.TWHistoryScreen.mount(content,{
-      items:history,limit:TWHistory.limit,time:time,resume:resumeHistory,
-      clear:function(){history=[];storeHistory();}
-    });
+    disposeScreen=window.TWHistoryScreen.mount(content);
   }
   function updateHistory(opening,completed){
     if(!state.playing)return;var p=state.playing;

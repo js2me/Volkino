@@ -1,14 +1,9 @@
 import { action, computed, makeObservable, observable, runInAction } from 'mobx';
-import { ViewModelBase, type ViewModelParams } from 'mobx-view-model';
-import { type CatalogBridge, type CatalogData, type CatalogItem, type Filters, type Genres, sortNames } from '../../../globals/catalog';
-import type { Globals } from '../../../globals';
+import type { ViewModelParams } from 'mobx-view-model';
+import { VM } from '../../../shared/lib/mobx';
+import { type CatalogData, type CatalogItem, type Filters, type Genres, sortNames } from '../../../globals/catalog';
 
-interface Payload {
-  globals: Globals;
-  bridge: CatalogBridge;
-}
-
-export class CatalogVM extends ViewModelBase<Payload> {
+export class CatalogVM extends VM {
   draft: Filters;
   genres: Genres;
   data: CatalogData | null = null;
@@ -20,10 +15,10 @@ export class CatalogVM extends ViewModelBase<Payload> {
   focusTarget: 'filters' | 'results' | 'restore' = 'filters';
   private request = 0;
 
-  constructor(params: ViewModelParams<Payload>) {
+  constructor(params: ViewModelParams) {
     super(params);
-    this.draft = { ...this.payload.globals.catalog.filters };
-    this.genres = this.payload.globals.catalog.genres;
+    this.draft = { ...this.globals.catalog.filters };
+    this.genres = this.globals.catalog.genres;
     makeObservable(this, {
       draft: observable.ref,
       genres: observable.ref,
@@ -50,11 +45,11 @@ export class CatalogVM extends ViewModelBase<Payload> {
   }
 
   get selectedId() {
-    return this.payload.globals.catalog.selectedId;
+    return this.globals.catalog.selectedId;
   }
 
   get scroll() {
-    return this.payload.globals.catalog.scroll;
+    return this.globals.catalog.scroll;
   }
 
   protected didMount() {
@@ -62,7 +57,7 @@ export class CatalogVM extends ViewModelBase<Payload> {
   }
 
   start() {
-    const session = this.payload.globals.catalog;
+    const session = this.globals.catalog;
     const cached = session.data;
     if (cached && Date.now() - cached.updatedAt < 3600000 &&
       (Object.keys(session.filters) as (keyof Filters)[]).every(key => cached.filters[key] === session.filters[key])) {
@@ -81,27 +76,27 @@ export class CatalogVM extends ViewModelBase<Payload> {
   }
 
   apply() {
-    this.payload.globals.catalog.filters = { ...this.draft, page: 1 };
-    this.draft = { ...this.payload.globals.catalog.filters };
+    this.globals.catalog.filters = { ...this.draft, page: 1 };
+    this.draft = { ...this.globals.catalog.filters };
     this.resetSelection();
     this.load(true);
   }
 
   private resetSelection() {
-    Object.assign(this.payload.globals.catalog, { data: null, selectedId: null, scroll: 0 });
+    Object.assign(this.globals.catalog, { data: null, selectedId: null, scroll: 0 });
   }
 
   load(focus = true) {
     const request = ++this.request;
-    const f = { ...this.payload.globals.catalog.filters, page: 1 };
-    this.payload.globals.catalog.filters = f;
+    const f = { ...this.globals.catalog.filters, page: 1 };
+    this.globals.catalog.filters = f;
     this.loadingMore = false; this.moreError = '';
     this.loading = true;
     this.error = '';
     this.data = null;
     const query = (Object.keys(f) as (keyof Filters)[])
       .map(key => `${key}=${encodeURIComponent(f[key])}`).join('&');
-    this.payload.bridge.api('catalog/browse?' + query, null, (error, data) => {
+    this.globals.app.api<CatalogData>('catalog/browse?' + query, null, (error, data) => {
       if (this.unmountSignal.aborted || request !== this.request) return;
       runInAction(() => {
         this.loading = false;
@@ -109,10 +104,10 @@ export class CatalogVM extends ViewModelBase<Payload> {
         else {
           this.data = data;
           this.genres = data.genres;
-          Object.assign(this.payload.globals.catalog, { data, genres: data.genres });
+          Object.assign(this.globals.catalog, { data, genres: data.genres });
         }
         if (focus) {
-          this.focusTarget = this.payload.globals.catalog.selectedId ? 'restore' : 'results';
+          this.focusTarget = this.globals.catalog.selectedId ? 'restore' : 'results';
           this.focusRevision++;
         }
       });
@@ -127,7 +122,7 @@ export class CatalogVM extends ViewModelBase<Payload> {
     const query = (Object.keys(filters) as (keyof Filters)[])
       .map(key => `${key}=${encodeURIComponent(filters[key])}`).join('&');
     this.loadingMore = true; this.moreError = '';
-    this.payload.bridge.api('catalog/browse?' + query, null, (error, data) => {
+    this.globals.app.api<CatalogData>('catalog/browse?' + query, null, (error, data) => {
       if (request !== this.request || this.unmountSignal.aborted) return;
       runInAction(() => {
         this.loadingMore = false;
@@ -135,14 +130,14 @@ export class CatalogVM extends ViewModelBase<Payload> {
         const seen = new Set(previous.items.map(item => item.id));
         const added = data.items.filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
         this.data = { ...data, items: [...previous.items, ...added], hasMore: data.hasMore && added.length > 0 };
-        Object.assign(this.payload.globals.catalog, { data: this.data, filters: data.filters, genres: data.genres });
+        Object.assign(this.globals.catalog, { data: this.data, filters: data.filters, genres: data.genres });
       });
     });
   }
 
   open(item: CatalogItem, scroll: number) {
-    Object.assign(this.payload.globals.catalog, { selectedId: item.id, scroll });
-    this.payload.bridge.openItem(item);
+    Object.assign(this.globals.catalog, { selectedId: item.id, scroll });
+    this.globals.app.openItem(item, 'catalog');
   }
 
   protected willUnmount() {

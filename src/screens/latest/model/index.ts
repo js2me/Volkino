@@ -1,9 +1,9 @@
 import { action, makeObservable, observable, runInAction } from 'mobx';
-import { ViewModelBase, type ViewModelParams } from 'mobx-view-model';
-import type { Globals } from '../../../globals';
-import type { LatestBridge, LatestDetails, LatestItem, LatestPage } from '../../../globals/latest';
+import type { ViewModelParams } from 'mobx-view-model';
+import { VM } from '../../../shared/lib/mobx';
+import type { LatestDetails, LatestItem, LatestPage } from '../../../globals/latest';
 
-export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBridge }> {
+export class LatestVM extends VM {
   data: LatestPage | null = null;
   loading = false;
   error = '';
@@ -23,7 +23,7 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
   private detailsTimer: ReturnType<typeof setTimeout> | undefined;
   private detailsCache = new Map<number, LatestDetails>();
 
-  constructor(params: ViewModelParams<{ globals: Globals; bridge: LatestBridge }>) {
+  constructor(params: ViewModelParams) {
     super(params);
     makeObservable(this, { data: observable.ref, loading: observable, error: observable,
       focusRevision: observable, load: action, loadMore: action, select: action,
@@ -31,7 +31,7 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
       selected: observable.ref, details: observable.ref, detailsLoading: observable, detailsError: observable });
   }
 
-  get session() { return this.payload.globals.latest; }
+  get session() { return this.globals.latest; }
 
   protected didMount() {
     const cached = this.session.data;
@@ -51,7 +51,7 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
     this.detailsFailed.clear();
     if (refresh) this.detailsCache.clear();
     this.select();
-    this.payload.bridge.api(`latest?page=${this.session.page}${refresh ? '&refresh=1' : ''}`, null, (error, data) => {
+    this.globals.app.api<LatestPage>(`latest?page=${this.session.page}${refresh ? '&refresh=1' : ''}`, null, (error, data) => {
       if (request !== this.request || this.unmountSignal.aborted) return;
       runInAction(() => {
         this.loading = false;
@@ -70,7 +70,7 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
     const previous = this.data;
     const request = ++this.request;
     this.loadingMore = true; this.moreError = '';
-    this.payload.bridge.api(`latest?page=${previous.page + 1}`, null, (error, data) => {
+    this.globals.app.api<LatestPage>(`latest?page=${previous.page + 1}`, null, (error, data) => {
       if (request !== this.request || this.unmountSignal.aborted) return;
       runInAction(() => {
         this.loadingMore = false;
@@ -132,7 +132,7 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
       if (this.detailsInFlight.has(item.filmixId)) continue;
       const epoch = this.detailsEpoch;
       this.detailsInFlight.set(item.filmixId, epoch);
-      this.payload.bridge.api<LatestDetails>('filmix/details?id=' + item.filmixId, null, (error, details) => {
+      this.globals.app.api<LatestDetails>('filmix/details?id=' + item.filmixId, null, (error, details) => {
         this.detailsInFlight.delete(item.filmixId);
         if (this.unmountSignal.aborted) return;
         runInAction(() => {
@@ -158,7 +158,7 @@ export class LatestVM extends ViewModelBase<{ globals: Globals; bridge: LatestBr
 
   open(item: LatestItem, scroll: number) {
     Object.assign(this.session, { selectedId: item.id, scroll });
-    this.payload.bridge.openFilmix(item.filmixId, item.title);
+    this.globals.app.openFilmix(item.filmixId, item.title);
   }
 
   protected willUnmount() {

@@ -1,5 +1,6 @@
 import { action, makeObservable, observable } from 'mobx';
-import { ViewModelBase, type ViewModelParams } from 'mobx-view-model';
+import type { ViewModelParams } from 'mobx-view-model';
+import { VM } from '../../../../shared/lib/mobx';
 
 export interface RemoteSelectPayload {
   select: HTMLSelectElement;
@@ -7,7 +8,7 @@ export interface RemoteSelectPayload {
   ready(model: RemoteSelectVM): void;
 }
 
-export class RemoteSelectVM extends ViewModelBase<RemoteSelectPayload> {
+export class RemoteSelectVM extends VM<RemoteSelectPayload> {
   readonly options: { label: string; index: number; disabled: boolean }[];
   readonly title: string;
   activeIndex: number;

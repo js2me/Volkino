@@ -1,4 +1,5 @@
 import { render } from 'solid-js/web';
+import { AppProvider } from '../providers';
 import { RemoteSelect } from '../ui/remote-select/ui';
 import type { RemoteSelectVM } from '../ui/remote-select/model';
 
@@ -71,9 +72,9 @@ class Navigation {
     const picker: NonNullable<Navigation['picker']> = { select, host };
     this.picker = picker;
     select.setAttribute('aria-expanded', 'true');
-    picker.dispose = render(() => <RemoteSelect payload={{
+    picker.dispose = render(() => <AppProvider><RemoteSelect payload={{
       select, close: () => this.close(), ready: model => { picker.model = model; },
-    }} />, host);
+    }} /></AppProvider>, host);
   }
 
   close(restore = true) {

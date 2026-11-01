@@ -37,8 +37,8 @@ export const Search = withViewModel(SearchVM, () => {
           </select>
         </div>
         <For each={model.sorted}>{(result, index) => <TorrentRow number={index() + 1} title={result.title}
-          meta={[{ text: model.bridge.bytes(result.size) }, { text: '↑ ' + result.seeders + ' сидов', cls: 'seed' }, { text: result.tracker }, { text: result.quality }]}
-          onOpen={() => model.bridge.open(result)} />}</For>
+          meta={[{ text: model.globals.app.bytes(result.size) }, { text: '↑ ' + result.seeders + ' сидов', cls: 'seed' }, { text: result.tracker }, { text: result.quality }]}
+          onOpen={() => model.globals.app.openSearch(result)} />}</For>
       </Show>
     </div>
   </div>;
