@@ -13,6 +13,24 @@ import java.net.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
+    static final String PLAYER_UPDATE = "org.torrenter.watcher.PLAYER_UPDATE";
+    private String playerToken;
+    private final BroadcastReceiver playerUpdates = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent data) {
+            if (destroyed || web == null || playerToken == null || !playerToken.equals(data.getStringExtra("token"))) return;
+            org.json.JSONObject result = new org.json.JSONObject();
+            try {
+                result.put("token", playerToken);
+                result.put("position", data.getDoubleExtra("position", 0));
+                result.put("duration", data.getDoubleExtra("duration", 0));
+                result.put("closed", data.getBooleanExtra("closed", false));
+                result.put("completed", data.getBooleanExtra("completed", false));
+                result.put("error", data.getStringExtra("error"));
+            } catch (org.json.JSONException ignored) { return; }
+            web.evaluateJavascript("window.TWAndroidPlayback && window.TWAndroidPlayback(" + result + ")", null);
+            if (data.getBooleanExtra("closed", false)) playerToken = null;
+        }
+    };
     private WebView web;
     private TextView status;
     private Messenger runtime;
@@ -44,6 +62,25 @@ public final class MainActivity extends Activity {
         web = new WebView(this); layout.addView(web);
         status = new TextView(this); status.setText("Запускаем VolKino…"); status.setTextColor(0xffe8f7ff); status.setBackgroundColor(0xff080e19); status.setGravity(Gravity.CENTER); status.setPadding(24, 24, 24, 24);
         layout.addView(status, new FrameLayout.LayoutParams(-1, -1)); setContentView(layout);
+        setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC);
+        IntentFilter updates = new IntentFilter(PLAYER_UPDATE);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(playerUpdates, updates, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(playerUpdates, updates);
+        web.addJavascriptInterface(new Object() {
+            @JavascriptInterface public void play(String path, String title, double position, int step, String token) {
+                handler.post(() -> {
+                    if (destroyed || !loaded || !local(Uri.parse(web.getUrl()))) return;
+                    Uri uri = Uri.parse(path);
+                    if (uri.isAbsolute() || !(path.startsWith("/stream?") || path.startsWith("/filmix-stream/"))) return;
+                    playerToken = token;
+                    Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
+                    intent.putExtra("url", origin + path); intent.putExtra("title", title);
+                    intent.putExtra("position", (long)(Math.max(0, position) * 1000));
+                    intent.putExtra("step", step); intent.putExtra("token", token);
+                    startActivity(intent);
+                });
+            }
+        }, "TWNativePlayer");
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true); settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
@@ -126,7 +163,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
     @Override protected void onDestroy() {
-        destroyed = true; handler.removeCallbacksAndMessages(null);
+        destroyed = true; unregisterReceiver(playerUpdates); handler.removeCallbacksAndMessages(null);
         if (bound) unbindService(connection);
         network.shutdownNow(); web.destroy(); super.onDestroy();
     }

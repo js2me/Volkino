@@ -2,7 +2,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const hash='0123456789abcdef0123456789abcdef01234567';
 const files=[{id:1,path:'Season 1/Episode 01.mkv',length:1000},{id:2,path:'Season 1/Episode 02.mkv',length:1000},{id:3,path:'Season 2/Episode 01.mkv',length:1000}];
-function boot(saved=[]){
+function boot(saved=[],nativePlayer){
   let document,clock=100000,nextId=0;const tasks=new Map(),requests=[],stored={};
   class Element{
     constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.style={};this.attributes={};this.listeners={};this.className='';this._text='';}
@@ -31,7 +31,7 @@ function boot(saved=[]){
   function later(fn,ms){tasks.set(++nextId,{fn,at:clock+ms});return nextId;}
   function advance(ms){const end=clock+ms;for(;;){const next=[...tasks].sort((a,b)=>a[1].at-b[1].at)[0];if(!next||next[1].at>end)break;clock=next[1].at;tasks.delete(next[0]);next[1].fn();}clock=end;}
   function XHR(){}XHR.prototype.open=function(method,url){this.url=url;};XHR.prototype.setRequestHeader=function(){};XHR.prototype.send=function(data){this.data=data;requests.push(this);};
-  const window={addEventListener(){}};
+  const window={addEventListener(){},TWNativePlayer:nativePlayer};
   const source=fs.readFileSync(require.resolve('../app/app.js'),'utf8').replace('}());','window.test={state:state,playFile:playFile,stopPlayer:stopPlayer,renderFiles:renderFiles,seekControl:seekControl,history:function(){return history;},openFilmix:openFilmix,resumeHistory:resumeHistory,searchFilmix:searchFilmix};}());');
   class FakeDate extends Date{static now(){return clock;}}
   vm.runInNewContext(source,{document,window,XMLHttpRequest:XHR,localStorage:{getItem(){return JSON.stringify(saved);},setItem(k,v){stored[k]=v;}},TWHistory:require('../app/history'),TWPlayback:Object.assign({},require('../app/playback'),{create(video,options){return require('../app/playback').create(video,Object.assign(options,{setTimeout:later,clearTimeout:id=>tasks.delete(id)}));}}),Date:FakeDate,setTimeout:later,clearTimeout:id=>tasks.delete(id)});
@@ -40,7 +40,7 @@ function boot(saved=[]){
   function ready(position=100,event='playing'){video.duration=1000;video.currentTime=position;video.readyState=4;video.paused=false;video.emit(event);}
   function play(){window.test.playFile(files[0],0);advance(100);ready();}
   function reply(route,value,status=200){const r=requests.find(r=>!r.done&&r.url.startsWith('/api/'+route));assert.ok(r,'pending '+route);r.done=true;r.status=status;r.responseText=JSON.stringify(value);r.onload();}
-  return {...window.test,document,video,player,elements,advance,key,ready,play,reply,requests,stored,tasks};
+  return {...window.test,window,document,video,player,elements,advance,key,ready,play,reply,requests,stored,tasks};
 }
 function item(id,position,duration=1000,extra={}){return {hash,fileId:id,title:'Episode',fileName:files[id-1].path,link:'magnet:?xt=urn:btih:'+hash,position,duration,...extra};}
 test('controls hide after pointer seeking and resume hiding when readiness recovers without playing event',()=>{
@@ -133,4 +133,51 @@ test('settings close when changing episodes and audio track errors keep playback
  h.key(38);h.key(13);assert.ok(h.state.playing);assert.match(h.elements.toast.textContent,/не поддерживает/);
  h.elements['touch-episodes'].click();assert.equal(h.state.optionsOpen,false);assert.equal(h.state.episodesOpen,true);
  h.key(39);h.key(13);assert.equal(h.state.playing.file.id,2);assert.equal(h.state.optionsOpen,false);
+});
+
+
+test('Android native playback bypasses WebView, preserves resume and records native progress',()=>{
+ const calls=[],h=boot([item(1,240)],{play(...args){calls.push(args);}});
+ h.playFile(files[0],240);h.advance(100);
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'/stream?hash='+hash+'&index=1');
+ assert.equal(calls[0][2],240);assert.equal(calls[0][3],30);assert.equal(h.video.paused,true);
+ h.advance(61000);assert.equal(h.state.playing.failed,undefined);
+ const token=calls[0][4];h.window.TWAndroidPlayback({token,position:400,duration:1000});
+ assert.equal(h.history()[0].position,400);
+ h.window.TWAndroidPlayback({token:'stale',position:900,duration:1000,closed:true});
+ assert.ok(h.state.playing);assert.equal(h.history()[0].position,400);
+ h.window.TWAndroidPlayback({token,position:500,duration:1000,closed:true});
+ assert.equal(h.state.playing,null);assert.equal(h.history()[0].position,500);
+});
+
+test('Filmix Android playback uses the renewed local grant and records completion',()=>{
+ const calls=[],h=boot([],{play(...args){calls.push(args);}});
+ h.openFilmix(42,'Online Series');h.reply('filmix/post',onlinePost());
+ h.playFile(h.state.files[0],120);h.advance(100);h.reply('filmix/play',{url:'/filmix-stream/native-grant'});
+ assert.equal(calls[0][0],'/filmix-stream/native-grant');assert.equal(calls[0][2],120);
+ h.window.TWAndroidPlayback({token:calls[0][4],position:999,duration:1000,completed:true,closed:true});
+ assert.equal(h.history()[0].completed,true);assert.equal(h.history()[0].source,'filmix');
+ assert.equal(h.stored['tw-history'].includes('native-grant'),false);
+});
+
+test('touch drag previews without seeking until release, survives time updates and commits the release position',()=>{
+ const h=boot();h.play();const bar=h.elements['player-timeline'];
+ function pointer(type,x,id=1){bar.emit(type,{pointerId:id,pointerType:'touch',clientX:x,button:0,preventDefault(){},stopPropagation(){}});}
+ pointer('pointerdown',100);pointer('pointermove',350);h.advance(6000);
+ assert.equal(h.video.currentTime,100);assert.equal(h.seekControl.target(),null);
+ h.video.emit('timeupdate');assert.equal(h.elements['player-progress'].style.width,'35%');
+ assert.equal(h.elements['player-controls'].className,'');
+ pointer('pointermove',900,2);assert.equal(h.elements['player-progress'].style.width,'35%');
+ pointer('pointerup',500);assert.equal(h.seekControl.target(),500);
+ bar.onclick({clientX:100,preventDefault(){},stopPropagation(){}});
+ assert.equal(h.seekControl.target(),500);h.advance(250);assert.equal(h.video.currentTime,500);
+});
+
+test('cancelling a touch drag restores the current position without seeking',()=>{
+ const h=boot();h.play();const bar=h.elements['player-timeline'];
+ const event=x=>({pointerId:1,clientX:x,button:0,preventDefault(){},stopPropagation(){}});
+ bar.emit('pointerdown',event(100));bar.emit('pointermove',event(750));
+ bar.emit('pointercancel',event(750));h.advance(300);
+ assert.equal(h.video.currentTime,100);assert.equal(h.seekControl.target(),null);
+ assert.equal(h.elements['player-progress'].style.width,'10%');
 });

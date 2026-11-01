@@ -6,7 +6,7 @@
   var state = { source:'torrent', filmix:null, filmixId:0, filmixVoice:'', filmixSeason:0, filmixQuality:0, filmixResults:[], filmixQuery:'', filmixOrigin:'search', view: 'search', token: '', config: {}, results: [], query: '', hash: '', torrent: null, files: [], timer: null, generation: 0, playing: null, overlayTimer: null, returnFocus: null, sort: 'seeders', resume: 0, playerTimer: null, playerDeadline: null, enterHeld: false, optionsOpen: false, fitIndex: 0, episodesOpen: false, episodeIndex: 0, episodeFiles: [], overlayVisible: false, homeData: null, homeScroll: 0, detailItem: null, lastHomeId: null, searchFromDetail: false, searchGeneration: 0, searchStatus: null, detailScroll: 0, detailTorrentIndex: 0, detailOrigin: 'home' };
   var disposeCatalog = null, disposeLatest = null, disposeAudioSettings = null, disposeScreen = null;
   var toastTimer, historyWarning=false, history = readHistory();
-  var seekControl;
+  var seekControl, timelineDrag=null, suppressTimelineClickUntil=0;
   if(window.TWApp)window.TWApp.initialize({
     api:api,state:state,history:function(){return history;},historyLimit:TWHistory.limit,
     time:time,bytes:bytes,sizeNumber:sizeNumber,toast:toast,resume:resumeHistory,
@@ -260,15 +260,16 @@
     if(!state.playing)return;var p=state.playing;
     var previous=watchedFile(p.file);
     // Before metadata arrives, keep the previous position instead of overwriting it with zero.
-    var position=opening||!isFinite(video.currentTime)||video.currentTime<0.1?(previous?previous.position||0:state.resume||0):video.currentTime;
-    var duration=!opening&&isFinite(video.duration)&&video.duration>0?video.duration:previous?previous.duration||0:0;
+    var playback=p.nativePlayback||video;
+    var position=opening||!isFinite(playback.currentTime)||playback.currentTime<0.1?(previous?previous.position||0:state.resume||0):playback.currentTime;
+    var duration=!opening&&isFinite(playback.duration)&&playback.duration>0?playback.duration:previous?previous.duration||0:0;
     var item={hash:state.hash,fileId:p.file.id,fileName:p.file.path,title:p.file.path.split('/').pop(),torrentTitle:state.torrent.title||state.torrent.name,link:state.originalLink||'magnet:?xt=urn:btih:'+state.hash,position:position,duration:duration,completed:!!completed||!!(previous&&previous.completed)||(!opening&&duration>0&&position/duration>=0.95),updated:Date.now()};
     if(state.source==='filmix'){item.source='filmix';item.filmixId=state.filmixId;item.voice=p.file.voice;item.season=p.file.season;item.quality=state.filmixQuality;}
     history=TWHistory.upsert(history,item);storeHistory();refreshFileProgress();
   }
   function armOverlay(){
     clearTimeout(state.overlayTimer);state.overlayTimer=null;
-    if(!state.playing||!state.overlayVisible||state.optionsOpen||video.paused||video.readyState<3||seekControl.isBusy()||state.playing.failed)return;
+    if(!state.playing||!state.overlayVisible||state.optionsOpen||video.paused||video.readyState<3||seekControl.isBusy()||timelineDrag||state.playing.failed)return;
     state.overlayTimer=setTimeout(function(){state.overlayTimer=null;if(!video.paused&&!seekControl.isBusy()&&video.readyState>=3)hideOverlay();},5000);
   }
   function showOverlay(){if(!state.playing)return;state.overlayVisible=true;$('player-top').className='';$('player-controls').className='';armOverlay();}
@@ -298,9 +299,18 @@
   function playFile(file,resume){
     closePlayerOptions();var switching=!!state.playing;if(switching)updateHistory();else state.returnFocus=document.activeElement;
     clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);clearTimeout(state.overlayTimer);seekControl.cancel();state.playing=null;resetAudioVideo();video.pause();video.removeAttribute('src');video.load();state.episodesOpen=false;$('player-episodes').className='hidden';state.playing={file:file,lastSave:0,started:Date.now()};state.resume=resume||0;if($('player-seek-step'))$('player-seek-step').textContent=seekStep()+' сек';$('touch-rewind').textContent='−'+seekStep()+' сек';$('touch-forward').textContent='+'+seekStep()+' сек';player.className='';$('playing-title').textContent=file.path.split('/').pop();$('playing-status').textContent=state.source==='filmix'?'Загружаем видео Filmix…':'Буферизация · получаем данные от TorrServer…';$('player-back').className='btn';$('player-back').focus();showOverlay();updateHistory(true);
-    var current=state.playing;setAudioStatus('');if(window.TWAudio)window.TWAudio.attach(video,state.config.audioFix||'off',function(active,message){if(state.playing!==current)return;if(active)setAudioStatus(message);else recoverAudio(current,message);});if(state.source!=='filmix')api('preload',{hash:state.hash,index:file.id},function(err){if(state.playing!==current)return;if(err)$('playing-status').textContent='Предзагрузка: '+err.message+' · пробуем открыть поток';});
+    var current=state.playing;setAudioStatus('');if(!window.TWNativePlayer&&window.TWAudio)window.TWAudio.attach(video,state.config.audioFix||'off',function(active,message){if(state.playing!==current)return;if(active)setAudioStatus(message);else recoverAudio(current,message);});if(state.source!=='filmix')api('preload',{hash:state.hash,index:file.id},function(err){if(state.playing!==current)return;if(err)$('playing-status').textContent='Предзагрузка: '+err.message+' · пробуем открыть поток';});
     // Let the TV paint the player before entering its native media pipeline.
-    function startVideo(url){if(state.playing!==current)return;video.src=url;video.load();var p=video.play();if(p&&p.catch)p.catch(function(e){if(state.playing===current){$('playing-status').textContent='Не удалось начать просмотр: '+e.message;showOverlay();}});}
+    function startVideo(url){if(state.playing!==current)return;
+      if(window.TWNativePlayer){
+        clearTimeout(state.playerDeadline);clearTimeout(state.playerTimer);
+        current.nativeToken=String(current.started)+':'+file.id;
+        current.nativePlayback={currentTime:state.resume||0,duration:0};
+        try{window.TWNativePlayer.play(url,file.path.split('/').pop(),state.resume||0,seekStep(),current.nativeToken);}
+        catch(e){stopPlayer();toast('Не удалось открыть Android-плеер: '+e.message);}
+        return;
+      }
+      video.src=url;video.load();var p=video.play();if(p&&p.catch)p.catch(function(e){if(state.playing===current){$('playing-status').textContent='Не удалось начать просмотр: '+e.message;showOverlay();}});}
     setTimeout(function(){if(state.playing!==current)return;if(state.source==='filmix'){
       var quality=file.qualities.filter(function(q){return q<=state.filmixQuality;})[0]||file.qualities[0];
       api('filmix/play',{id:state.filmixId,fileId:file.id,voice:file.voice,quality:quality},function(err,r){if(state.playing!==current)return;if(err){clearTimeout(state.playerDeadline);current.failed=true;$('playing-status').textContent=err.message;showOverlay();return;}startVideo(r.url);});
@@ -308,6 +318,12 @@
     state.playerDeadline=setTimeout(function(){if(state.playing!==current||video.readyState>=3)return;clearTimeout(state.playerTimer);video.pause();video.removeAttribute('src');video.load();current.failed=true;$('playing-status').textContent=state.source==='filmix'?'Не удалось начать просмотр Filmix за 60 секунд. Проверьте доступность видео и выберите другое качество.':'Не удалось начать просмотр за 60 секунд. Проверьте сидов и выберите другую раздачу; её видео или аудио также могут не поддерживаться телевизором.';showOverlay();},60000);
     if(state.source!=='filmix')pollPlayer(current);
   }
+  window.TWAndroidPlayback=function(result){
+    var current=state.playing;if(!current||current.nativeToken!==result.token)return;
+    current.nativePlayback={currentTime:result.position,duration:result.duration};
+    updateHistory(false,result.completed);
+    if(result.closed){stopPlayer();if(result.error)toast(result.error);}
+  };
   function setAudioStatus(text){var label=$('audio-mode-status');if(label)label.textContent=text;}
   function resetAudioVideo(){
     if(!window.TWAudio||!window.TWAudio.reset())return;
@@ -321,7 +337,7 @@
     if(url){video.src=url;video.load();if(!paused){var p=video.play();if(p&&p.catch)p.catch(function(){if(state.playing===current){$('playing-status').textContent='Нажмите OK, чтобы продолжить';showOverlay();}});}}
   }
   function pollPlayer(current){state.playerTimer=setTimeout(function(){if(state.playing!==current||current.failed||video.readyState>=3)return;api('status?hash='+encodeURIComponent(state.hash),null,function(err,r){if(state.playing!==current||current.failed||video.readyState>=3)return;if(!err){var t=r.torrent,p=t.preload_size?Math.min(100,Math.floor(100*(t.preloaded_bytes||0)/t.preload_size)):0;$('playing-status').textContent='Подготовка: '+p+'% · '+bytes(t.download_speed)+'/с · сиды '+(t.connected_seeders||0)+' · '+Math.floor((Date.now()-current.started)/1000)+' сек. BACK — вернуться к файлам';}pollPlayer(current);});},2000);}
-  function stopPlayer(){closePlayerOptions();updateHistory();seekControl.cancel();state.episodesOpen=false;state.overlayVisible=false;$('player-episodes').className='hidden';state.playing=null;clearTimeout(state.overlayTimer);clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);video.pause();video.removeAttribute('src');video.load();resetAudioVideo();setAudioStatus('');player.className='hidden';if(state.returnFocus&&document.body.contains(state.returnFocus))state.returnFocus.focus();else focusFirst();}
+  function stopPlayer(){cancelTimelineDrag();closePlayerOptions();updateHistory();seekControl.cancel();state.episodesOpen=false;state.overlayVisible=false;$('player-episodes').className='hidden';state.playing=null;clearTimeout(state.overlayTimer);clearTimeout(state.playerTimer);clearTimeout(state.playerDeadline);video.pause();video.removeAttribute('src');video.load();resetAudioVideo();setAudioStatus('');player.className='hidden';if(state.returnFocus&&document.body.contains(state.returnFocus))state.returnFocus.focus();else focusFirst();}
   $('player-back').onclick=stopPlayer;
   $('touch-exit').onclick=stopPlayer;
   $('touch-rewind').onclick=function(){seek(-seekStep());};
@@ -349,13 +365,49 @@
   function seekStep(){var value=state.config.seekStep;return typeof value==='number'&&isFinite(value)&&Math.floor(value)===value&&value>=1&&value<=3600?value:30;}
   function seek(delta){if(!seekControl.by(delta))toast('Перемотка станет доступна после загрузки метаданных');}
   $('player-timeline').onclick=function(e){
-    if(!state.playing)return;e.preventDefault();e.stopPropagation();closeEpisodes();$('player-timeline').focus();
+    if(!state.playing||Date.now()<suppressTimelineClickUntil)return;e.preventDefault();e.stopPropagation();closeEpisodes();$('player-timeline').focus();
     var rect=$('player-timeline').getBoundingClientRect();var position=TWPlayback.pointerTime(e.clientX,rect.left,rect.width,video.duration);
     if(position===null||!seekControl.to(position))toast('Перемотка станет доступна после загрузки метаданных');
   };
-  var pointerPosition=null;
-  player.addEventListener('mousemove',function(e){if(!state.playing)return;if(pointerPosition&&Math.abs(e.clientX-pointerPosition.x)<4&&Math.abs(e.clientY-pointerPosition.y)<4)return;pointerPosition={x:e.clientX,y:e.clientY};showOverlay();});
-  player.addEventListener('click',function(e){if(state.playing&&e.target===video)showOverlay();});
+  function dragTimeline(e){
+    var rect=$('player-timeline').getBoundingClientRect();
+    var position=TWPlayback.pointerTime(e.clientX,rect.left,rect.width,video.duration);
+    if(position===null)return;
+    timelineDrag.position=position;renderPosition(position);showOverlay();
+  }
+  function cancelTimelineDrag(){
+    if(!timelineDrag)return;
+    var id=timelineDrag.id;timelineDrag=null;
+    try{$('player-timeline').releasePointerCapture(id);}catch(_){}
+    renderPosition(seekControl.target()===null?video.currentTime:seekControl.target());showOverlay();
+  }
+  $('player-timeline').addEventListener('pointerdown',function(e){
+    if(!state.playing||timelineDrag||e.isPrimary===false||(e.button!==undefined&&e.button!==0))return;
+    if(video.readyState<1||!isFinite(video.duration)||video.duration<=0)return;
+    e.preventDefault();e.stopPropagation();timelineDrag={id:e.pointerId,position:video.currentTime};
+    closeEpisodes();$('player-timeline').focus();
+    try{$('player-timeline').setPointerCapture(e.pointerId);}catch(_){}
+    dragTimeline(e);
+  });
+  $('player-timeline').addEventListener('pointermove',function(e){
+    if(!timelineDrag||timelineDrag.id!==e.pointerId)return;
+    e.preventDefault();e.stopPropagation();dragTimeline(e);
+  });
+  $('player-timeline').addEventListener('pointerup',function(e){
+    if(!timelineDrag||timelineDrag.id!==e.pointerId)return;
+    e.preventDefault();e.stopPropagation();dragTimeline(e);
+    var position=timelineDrag.position;timelineDrag=null;suppressTimelineClickUntil=Date.now()+500;
+    try{$('player-timeline').releasePointerCapture(e.pointerId);}catch(_){}
+    if(!seekControl.to(position))toast('Перемотка станет доступна после загрузки метаданных');
+    showOverlay();
+  });
+  ['pointercancel','lostpointercapture'].forEach(function(type){$('player-timeline').addEventListener(type,function(e){
+    if(timelineDrag&&timelineDrag.id===e.pointerId){suppressTimelineClickUntil=Date.now()+500;cancelTimelineDrag();}
+  });});
+  var pointerPosition=null,touchMouseUntil=0;
+  player.addEventListener('pointerdown',function(e){if(e.pointerType==='touch')touchMouseUntil=Date.now()+1000;});
+  player.addEventListener('mousemove',function(e){if(!state.playing||Date.now()<touchMouseUntil||(e.sourceCapabilities&&e.sourceCapabilities.firesTouchEvents))return;if(pointerPosition&&Math.abs(e.clientX-pointerPosition.x)<4&&Math.abs(e.clientY-pointerPosition.y)<4)return;pointerPosition={x:e.clientX,y:e.clientY};showOverlay();});
+  player.addEventListener('click',function(e){if(!state.playing||e.target!==video)return;if(state.overlayVisible)hideOverlay();else showOverlay();});
   function bindVideo(){
   if(video.audioTracks&&video.audioTracks.addEventListener){['addtrack','removetrack','change'].forEach(function(event){video.audioTracks.addEventListener(event,updatePlayerOptions);});}
   seekControl=TWPlayback.create(video,{
@@ -369,7 +421,7 @@
   video.addEventListener('playing',function(){$('touch-pause').textContent='Пауза';clearTimeout(state.playerDeadline);clearTimeout(state.playerTimer);seekControl.update();if(!seekControl.isBusy()){$('playing-status').textContent='';$('player-back').className='hidden';}showOverlay();});video.addEventListener('waiting',function(){if(!state.playing||state.playing.failed)return;if(seekControl.isBusy()){showOverlay();return;}$('playing-status').textContent=state.source==='filmix'?'Буферизация · ждём данные Filmix…':'Буферизация · ждём данные от участников раздачи…';showOverlay();});
   video.addEventListener('canplay',function(){if(state.playing&&!seekControl.isBusy())$('playing-status').textContent=video.paused?'Пауза':'';if(state.overlayTimer===null)armOverlay();});video.addEventListener('pause',function(){$('touch-pause').textContent='Продолжить';if(state.playing&&!seekControl.isBusy())$('playing-status').textContent='Пауза';showOverlay();});video.addEventListener('ended',function(){updateHistory(false,true);stopPlayer();toast('Просмотр завершён');});
   video.addEventListener('error',function(){if(!state.playing)return;var code=video.error?video.error.code:0;$('playing-status').textContent=code===4?'Формат видео или аудио не поддерживается телевизором. Выберите другое видео или качество.':'Ошибка потока ('+code+'). '+(state.source==='filmix'?'Проверьте Filmix или выберите другое качество.':'Проверьте TorrServer и доступность сидов.');showOverlay();});
-  video.addEventListener('timeupdate',function(){seekControl.update();renderPosition(seekControl.target()===null?video.currentTime:seekControl.target());if(state.overlayTimer===null)armOverlay();if(state.playing&&!seekControl.isBusy()&&Date.now()-state.playing.lastSave>10000){state.playing.lastSave=Date.now();updateHistory();}});
+  video.addEventListener('timeupdate',function(){seekControl.update();renderPosition(timelineDrag?timelineDrag.position:seekControl.target()===null?video.currentTime:seekControl.target());if(state.overlayTimer===null)armOverlay();if(state.playing&&!seekControl.isBusy()&&Date.now()-state.playing.lastSave>10000){state.playing.lastSave=Date.now();updateHistory();}});
   }
   bindVideo();
   var fitModes=['contain','cover','fill'];

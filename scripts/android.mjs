@@ -42,7 +42,8 @@ for (const [abi, arch] of Object.entries({ 'armeabi-v7a': 'arm7', 'arm64-v8a': '
   fs.copyFileSync(path.join(vendor, `TorrServer-android-${arch}`), path.join(dir, 'libtorrserver.so'));
 }
 for (const name of ['NODE-LICENSE', 'TORRSERVER-LICENSE']) fs.copyFileSync(path.join(vendor, name), path.join(assets, name));
-fs.writeFileSync(path.join(assets, 'THIRD-PARTY-NOTICES.txt'), `VolKino includes Node.js Mobile v18.20.4 (MIT and third-party licenses, see NODE-LICENSE) and TorrServer MatriX.147.2 (GPL-3.0, see TORRSERVER-LICENSE).\nSources: https://github.com/nodejs-mobile/nodejs-mobile/tree/v18.20.4\nhttps://github.com/YouROK/TorrServer/tree/MatriX.147.2\n`);
+fs.copyFileSync(path.join(android, 'LIBVLC-LICENSE'), path.join(assets, 'LIBVLC-LICENSE'));
+fs.writeFileSync(path.join(assets, 'THIRD-PARTY-NOTICES.txt'), `VolKino includes Node.js Mobile v18.20.4 (MIT and third-party licenses, see NODE-LICENSE) and TorrServer MatriX.147.2 (GPL-3.0, see TORRSERVER-LICENSE).\nLibVLC Android 3.6.5 (LGPL-2.1, see LIBVLC-LICENSE). Source and build scripts: https://code.videolan.org/videolan/libvlcjni/-/tree/3.6.5\nSources: https://github.com/nodejs-mobile/nodejs-mobile/tree/v18.20.4\nhttps://github.com/YouROK/TorrServer/tree/MatriX.147.2\n`);
 const drawable = path.join(android, 'app/src/main/res/drawable');
 fs.copyFileSync(path.join(root, 'app/icon-large.png'), path.join(drawable, 'icon.png'));
 if (process.argv.includes('--prepare')) { console.log('Android assets prepared'); process.exit(0); }

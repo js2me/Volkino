@@ -8,7 +8,7 @@ android {
         applicationId 'org.torrenter.watcher'
         minSdk 23
         targetSdk 35
-        versionCode 702
+        versionCode 703
         versionName pkg.version
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', '-DANDROID_STL=c++_shared'; cppFlags '-std=c++17' } }
@@ -33,3 +33,5 @@ def prepareRuntime = tasks.register('prepareVolkinoRuntime', Exec) {
 }
 tasks.named('preBuild').configure { dependsOn prepareRuntime }
 tasks.configureEach { if (name.startsWith('configureCMake')) dependsOn prepareRuntime }
+
+dependencies { implementation 'org.videolan.android:libvlc-all:3.6.5' }
