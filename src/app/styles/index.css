@@ -108,8 +108,6 @@ aside>nav::-webkit-scrollbar-thumb{background:var(--color-border-strong);border-
 .latest-ratings{display:flex;flex-wrap:wrap;font-size:15px}
 .latest-ratings span{margin:0 12px 8px 0;padding:7px 10px;border-radius:7px;background:var(--color-surface-raised)}
 .latest-ratings strong{margin-left:5px}
-.latest-ratings .rating-imdb{background:var(--color-movie-surface);color:var(--color-accent-bright)}
-.latest-ratings .rating-kp{background:var(--color-success-surface);color:var(--color-success)}
 .latest-genres{font-size:15px;line-height:1.4;margin:18px 0 12px;color:var(--color-text-muted)}
 .latest-description{font-size:20px;line-height:1.5;margin:12px 0;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
 .latest-credits{font-size:15px;line-height:1.4;margin:8px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--color-text-muted)}
@@ -243,7 +241,6 @@ html[data-device="tablet"] .player-control-row>span:last-child{display:none}
 .infinite-scroll-status p{margin:0 0 12px}
 
 /* Color marks content and state; artwork keeps its original colors. */
-.poster-rating.rating-high{background:var(--color-success);color:#10271e}
 .poster-card[data-media-type="tv"] .poster-meta{color:var(--color-series)}
 .home-section h2:before{content:"";display:inline-block;width:4px;height:.8em;margin-right:12px;border-radius:3px;background:var(--color-accent)}
 .home-section[data-media-type="tv"] h2:before{background:var(--color-series)}

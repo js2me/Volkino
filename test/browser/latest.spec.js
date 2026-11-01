@@ -139,3 +139,75 @@ test('a late description cannot replace the currently selected title', async ({ 
   await first.fulfill({ json: { id: 1, title: 'Устаревший ответ', description: 'Устаревшее описание', genres: [], countries: [], actors: [], directors: [] } });
   await expect(page.locator('.latest-preview')).not.toContainText('Устаревший');
 });
+
+test('prefetches three titles ahead and shows cached details immediately on focus', async ({ page }) => {
+  const requests = new Map();
+  await page.route('**/api/filmix/details?*', async route => {
+    const id = Number(new URL(route.request().url()).searchParams.get('id'));
+    requests.set(id, (requests.get(id) || 0) + 1);
+    await route.continue();
+  });
+  await open(page);
+  // Night Express is two rows ahead of the initial film; it loads before selection.
+  await expect.poll(() => requests.get(2) || 0).toBe(1);
+  await expect.poll(() => requests.size).toBe(4);
+  await expect(page.locator('.latest-preview h2')).toHaveText('За горизонтом');
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
+    .some(entry => entry.name.includes('/api/filmix/details?id=2') && entry.responseEnd > 0))).toBe(true);
+  const instant = await page.locator('.latest-row').nth(2).evaluate(row => {
+    row.focus();
+    return { title: document.querySelector('.latest-preview h2').textContent,
+      loading: document.querySelector('.latest-preview').getAttribute('aria-busy'),
+      description: document.querySelector('.latest-description')?.textContent };
+  });
+  expect(instant.title).toBe('Ночной экспресс');
+  expect(instant.loading).toBe('false');
+  expect(instant.description).toBeTruthy();
+  expect(requests.get(2)).toBe(1);
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
+    .some(entry => entry.name.includes('/mock/poster/movie-2.svg')))).toBe(true);
+});
+
+test('limits prefetch concurrency, joins an in-flight request and stops queued work on exit', async ({ page }) => {
+  const pending = [], requested = [];
+  await page.route('**/api/filmix/details?*', route => {
+    requested.push(Number(new URL(route.request().url()).searchParams.get('id')));
+    pending.push(route);
+  });
+  await open(page);
+  await expect.poll(() => pending.length).toBe(2);
+  expect(requested).toEqual([1, 101]);
+  // Both request slots are held; selecting the series must join its prefetch.
+  await page.locator('.latest-row').nth(1).focus();
+  await expect(page.locator('.latest-preview h2')).toHaveText('За горизонтом (сериал)');
+  await pending[1].fulfill({ json: { id: 101, title: 'Готовый сериал', description: 'Предзагрузка без дубликата',
+    genres: [], countries: [], actors: [], directors: [] } });
+  await expect(page.locator('.latest-description')).toHaveText('Предзагрузка без дубликата');
+  expect(requested.filter(id => id === 101)).toHaveLength(1);
+  await page.locator('#nav-home').click();
+  const total = requested.length;
+  for (const route of pending.filter(route => route !== pending[1])) {
+    await route.fulfill({ json: { id: 1, title: 'Поздний ответ', genres: [], countries: [], actors: [], directors: [] } });
+  }
+  await expect(page.locator('.home-intro')).toBeVisible();
+  await expect(page.locator('#content')).not.toContainText('Поздний ответ');
+  expect(requested).toHaveLength(total);
+});
+
+test('a failed prefetch stays silent and retries when the title is selected', async ({ page }) => {
+  let attempts = 0;
+  await page.route('**/api/filmix/details?id=2', route => {
+    if (++attempts === 1) return route.fulfill({ status: 503, json: { error: 'Temporary outage' } });
+    return route.continue();
+  });
+  await open(page);
+  await expect.poll(() => attempts).toBe(1);
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
+    .some(entry => entry.name.includes('/api/filmix/details?id=2') && entry.responseEnd > 0))).toBe(true);
+  await expect(page.locator('.latest-description')).toBeVisible();
+  await expect(page.locator('.latest-preview')).not.toContainText('недоступно');
+  await page.locator('.latest-row').nth(2).focus();
+  await expect(page.locator('.latest-preview h2')).toHaveText('Ночной экспресс');
+  await expect(page.locator('.latest-description')).toBeVisible();
+  expect(attempts).toBe(2);
+});

@@ -1,4 +1,5 @@
 import { For, Show, createEffect, onMount } from 'solid-js';
+import { ratingStyle } from '../../../shared/lib/rating-color';
 import { useViewModel, withViewModel } from 'mobx-view-model-solid';
 import { LatestVM } from '../model';
 import { Portal } from 'solid-js/web';
@@ -66,8 +67,8 @@ export const Latest = withViewModel(LatestVM, () => {
                 <Show when={model.details?.originalTitle}><p class="latest-original">{model.details?.originalTitle}</p></Show>
                 <p class="latest-preview-meta">{model.details?.year || item().year}{model.details?.duration ? ' · ' + model.details.duration + ' мин' : ''}</p>
                 <div class="latest-ratings">
-                  <Show when={model.details?.imdbRating}><span class="rating-imdb">IMDb <strong>{model.details?.imdbRating}</strong></span></Show>
-                  <Show when={model.details?.kpRating}><span class="rating-kp">Кинопоиск <strong>{model.details?.kpRating}</strong></span></Show>
+                  <Show when={model.details?.imdbRating}><span style={ratingStyle(model.details?.imdbRating)}>IMDb <strong>{model.details?.imdbRating}</strong></span></Show>
+                  <Show when={model.details?.kpRating}><span style={ratingStyle(model.details?.kpRating)}>Кинопоиск <strong>{model.details?.kpRating}</strong></span></Show>
                 </div>
                 <Show when={item().quality}><p class="latest-quality">{item().quality}</p></Show>
                 <Show when={item().episode}><p class="latest-quality">Сезон {item().season}, серия {item().episode}</p></Show>

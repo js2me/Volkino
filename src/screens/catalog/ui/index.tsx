@@ -1,4 +1,5 @@
 import { For, Show, createEffect } from 'solid-js';
+import { ratingStyle } from '../../../shared/lib/rating-color';
 import { useViewModel, withViewModel } from 'mobx-view-model-solid';
 import { CatalogVM } from '../model';
 import { InfiniteScroll } from '../../../app/ui/infinite-scroll';
@@ -71,7 +72,7 @@ export const Catalog = withViewModel(CatalogVM, () => {
             <div class="poster-art">
               <span class="poster-fallback">{item.title.slice(0, 1)}</span>
               <Show when={item.poster}><img alt="" src={item.poster} loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /></Show>
-              <Show when={item.rating}><span class="poster-rating" classList={{ 'rating-high': Number(item.rating) >= 8 }}>{item.rating}</span></Show>
+              <Show when={item.rating}><span class="poster-rating" style={ratingStyle(item.rating)}>{item.rating}</span></Show>
             </div>
             <span class="poster-name">{item.title}</span>
             <span class="poster-meta">{item.year || ''}{item.type === 'tv' ? ' · Сериал' : ' · Фильм'}</span>
