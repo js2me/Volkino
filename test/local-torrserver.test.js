@@ -16,9 +16,10 @@ function fixture(dir){
 const fs=require('fs'),http=require('http'),path=require('path');
 const args=process.argv;const data=args[args.indexOf('--path')+1];
 fs.writeFileSync(path.join(data,'pid'),String(process.pid));
+fs.appendFileSync(path.join(data,'pids'),process.pid+'\\n');
 http.createServer((req,res)=>{
  if(req.headers.authorization){res.writeHead(401);return res.end('credentials leaked');}
- if(req.url==='/echo')return res.end('MatriX.fixture');
+ if(req.url==='/echo'){if(fs.existsSync(path.join(data,'hang'))){fs.unlinkSync(path.join(data,'hang'));return;}return res.end('MatriX.fixture');}
  if(req.url.startsWith('/stream')){res.writeHead(206,{'Content-Range':'bytes 0-3/4','Content-Length':'4'});return res.end('DATA');}
  res.end('[]');
 }).listen(Number(args[args.indexOf('--port')+1]),args[args.indexOf('--ip')+1]);
@@ -59,4 +60,64 @@ test('managed local server switches proxy, preserves external secrets, autostart
     await api('config',{torrserverMode:'local'});assert.equal((await api('health')).version,'MatriX.fixture');
     await api('config',{torrserverMode:'external'});assert.equal((await api('local-server')).state,'stopped');
   }finally{await close();fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test('local supervisor recovers from a crash and an unresponsive process, but respects manual stop',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tw-reconnect-'));fixture(dir);
+  const manager=local.create({directory:dir,port:await freePort(),watchInterval:50,reconnectDelay:50});
+  const data=path.join(dir,'torrserver/data');
+  const pid=()=>Number(fs.readFileSync(path.join(data,'pid')));
+  try{
+    await manager.start();const first=pid();process.kill(first,'SIGKILL');
+    await until(()=>manager.status().state==='running'&&pid()!==first);
+    const second=pid();fs.writeFileSync(path.join(data,'hang'),'');
+    await until(()=>manager.status().state==='running'&&pid()!==second);
+    const starts=fs.readFileSync(path.join(data,'pids'),'utf8');
+    await manager.stop();await new Promise(r=>setTimeout(r,250));
+    assert.equal(manager.status().state,'stopped');
+    assert.equal(fs.readFileSync(path.join(data,'pids'),'utf8'),starts);
+  }finally{await manager.stop();fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('stop cancels startup before the process is spawned and cancels a queued retry',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tw-stop-race-'));fixture(dir);
+  const port=await freePort(),manager=local.create({directory:dir,port,watchInterval:50,reconnectDelay:50});
+  const occupied=http.createServer();
+  try{
+    const starting=manager.start();await manager.stop();await assert.rejects(starting,/отменён/);
+    assert.equal(fs.existsSync(path.join(dir,'torrserver/data/pid')),false);
+    await new Promise(r=>occupied.listen(port,'127.0.0.1',r));
+    await assert.rejects(manager.start(),/занят/);await manager.stop();
+    await new Promise(r=>occupied.close(r));await new Promise(r=>setTimeout(r,250));
+    assert.equal(manager.status().state,'stopped');assert.equal(fs.existsSync(path.join(dir,'torrserver/data/pid')),false);
+  }finally{await manager.stop();if(occupied.listening)await new Promise(r=>occupied.close(r));fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('fresh configuration defaults to local autostart while saved external choices and legacy addresses are preserved',async()=>{
+  for(const scenario of [
+    {saved:null,mode:'local'},
+    {saved:{seekStep:60},mode:'local'},
+    {saved:{filmixTransport:'web'},mode:'local',filmix:'web'},
+    {saved:{torrserverMode:'external'},mode:'external'},
+    {saved:{torrserverMode:'external',torrserverUrl:'http://192.0.2.1:8090'},mode:'external'},
+    {saved:{torrserverUrl:'http://192.0.2.1:8090'},mode:'external'},
+    {saved:{torrserverMode:'local',torrserverUrl:'http://192.0.2.1:8090'},mode:'local'},
+    {saved:null,url:'http://192.0.2.1:8090',mode:'external'}
+  ]){
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tw-default-mode-'));fixture(dir);
+    const cfg=path.join(dir,'config.json'),port=await freePort(),tsPort=await freePort();
+    if(scenario.saved)fs.writeFileSync(cfg,JSON.stringify(scenario.saved));
+    const child=spawn(process.execPath,['server/index.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,PORT:String(port),TW_CONFIG:cfg,TW_TORRSERVER_PORT:String(tsPort),TORRSERVER_URL:scenario.url||''},stdio:['ignore','pipe','pipe']});
+    try{
+      await once(child.stdout,'data');const base='http://127.0.0.1:'+port;
+      const {token}=await(await request(base+'/api/session')).json();
+      const api=async route=>(await request(base+'/api/'+route,{headers:{'X-App-Token':token}})).json();
+      const config=await api('config');
+      assert.equal(config.torrserverMode,scenario.mode,JSON.stringify(scenario));
+      assert.equal(config.filmixTransport,scenario.filmix||'mobile');
+      if(scenario.mode==='local')await until(async()=>(await api('local-server')).state==='running');
+      else{await new Promise(r=>setTimeout(r,100));assert.equal((await api('local-server')).state,'stopped');}
+    }finally{if(child.exitCode===null){const done=once(child,'exit');child.kill();await done;}fs.rmSync(dir,{recursive:true,force:true});}
+  }
 });

@@ -6,10 +6,13 @@ var PORT = Number(process.env.PORT || 32190), HOST = process.env.HOST || '127.0.
 var APP = path.resolve(__dirname, '../app');
 if (!fs.existsSync(path.join(APP, 'index.html'))) APP = path.resolve(__dirname, '..');
 var CONFIG = process.env.TW_CONFIG || path.resolve(__dirname, '../config.json');
-var defaults = { seekStep: 30, audioFix: 'off', torrserverMode: 'external', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
+var defaults = { seekStep: 30, audioFix: 'off', torrserverMode: 'local', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
 Object.assign(defaults,{filmixTransport:'mobile',filmixWebHash:'',filmixWebAccessToken:'',filmixWebRefreshToken:'',filmixWebUserAgent:''});
 var config=Object.assign({},defaults);
-try { config = Object.assign(config, JSON.parse(fs.readFileSync(CONFIG, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') console.error('Cannot load config:', e.message); }
+var savedConfig = {};
+try { savedConfig = JSON.parse(fs.readFileSync(CONFIG, 'utf8')) || {}; config = Object.assign(config, savedConfig); } catch (e) { if (e.code !== 'ENOENT') console.error('Cannot load config:', e.message); }
+// Older configurations and TORRSERVER_URL may specify an external address without a mode.
+if (!Object.prototype.hasOwnProperty.call(savedConfig, 'torrserverMode') && (savedConfig.torrserverUrl || process.env.TORRSERVER_URL)) config.torrserverMode = 'external';
 if (!validSeekStep(config.seekStep)) config.seekStep=30;
 if (['off','moderate','night'].indexOf(config.audioFix)<0) config.audioFix='off';
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
@@ -130,16 +133,15 @@ var server = http.createServer(function (req, res) {
   Promise.resolve().then(function () {
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) {
-      if (localTS.busy()&&b.torrserverMode!==undefined) throw new Error('Дождитесь установки или запуска TorrServer');
+      if (localTS.busy()&&b.torrserverMode==='local'&&config.torrserverMode!=='local') throw new Error('Дождитесь установки или запуска TorrServer');
       var local = (b.torrserverMode || config.torrserverMode) === 'local';
       // Validate before changing process state.
       validateConfig(b);
-      return (b.torrserverMode===undefined||b.torrserverMode===config.torrserverMode?Promise.resolve():local ? localTS.start() : localTS.stop()).then(function () { saveConfig(b); return publicConfig(); });
+      return (b.torrserverMode===undefined||b.torrserverMode===config.torrserverMode?Promise.resolve():local ? localTS.start().catch(function (e) { return localTS.stop().then(function () { throw e; }); }) : localTS.stop()).then(function () { saveConfig(b); return publicConfig(); });
     });
     if (route === '/api/local-server' && req.method === 'GET') return localTS.status();
-    if (route === '/api/local-server/start' && req.method === 'POST') return localTS.run(true, function () { saveConfig({torrserverMode: 'local'}); });
+    if (route === '/api/local-server/start' && req.method === 'POST') { saveConfig({torrserverMode: 'local'}); return localTS.run(true); }
     if (route === '/api/local-server/stop' && req.method === 'POST') {
-      if (localTS.busy()) throw new Error('Дождитесь установки или запуска TorrServer');
       return localTS.stop().then(function () { saveConfig({torrserverMode: 'external'}); return localTS.status(); });
     }
     if (route === '/api/filmix/search' && req.method === 'GET') return filmix.search(q.q);

@@ -8,6 +8,7 @@ test('web account settings sign in without retaining the password and still save
   });
   await page.goto('/'); await expect(page.locator('.home-intro')).toBeVisible();
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await expect(page.locator('#filmix-transport')).toHaveValue('mobile');
   await page.locator('#filmix-transport').selectOption('web');
   await expect(page.locator('#filmix-login')).toBeVisible();
   await page.locator('#filmix-login').fill('example');
@@ -18,4 +19,8 @@ test('web account settings sign in without retaining the password and still save
   expect(received).toEqual({ name: 'example', password: 'test-password' });
   await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
   await expect(page.locator('#toast')).toContainText('Настройки сохранены');
+  await page.reload();
+  await expect(page.locator('.home-intro')).toBeVisible();
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await expect(page.locator('#filmix-transport')).toHaveValue('web');
 });

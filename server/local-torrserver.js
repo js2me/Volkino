@@ -32,6 +32,29 @@ function download(url, file, digest, redirects) {
 function create(options) {
   var dir = path.join(options.directory, 'torrserver'), binary = process.env.TW_TORRSERVER_BINARY || path.join(dir, 'TorrServer-' + release.version);
   var child = null, job = null, phase = 'stopped', error = '', stopping = null, starting = null;
+  var wanted = false, generation = 0, watchTimer = null, watchBusy = false;
+  var watchInterval = options.watchInterval || 5000, retryDelay = options.reconnectDelay || 1000, nextDelay = retryDelay;
+  function scheduleWatch(delay) {
+    if (!wanted || watchTimer) return;
+    watchTimer = setTimeout(watch, delay);
+    if (watchTimer.unref) watchTimer.unref();
+  }
+  function watch() {
+    watchTimer = null;
+    if (!wanted) return;
+    if (watchBusy || job || starting || stopping) { scheduleWatch(watchInterval); return; }
+    watchBusy = true;
+    var version = generation;
+    function active() { return wanted && version === generation; }
+    var check = child && phase === 'running' ? echo().catch(function () {
+      if (!active()) return;
+      return terminate().then(function () { if (active()) return start(); });
+    }) : start();
+    Promise.resolve(check).then(function () { if (active()) nextDelay = watchInterval; }, function (e) {
+      if (active()) { phase = 'error'; error = e.message; nextDelay = Math.min(Math.max(retryDelay, nextDelay * 2), 30000); }
+    }).then(function () { watchBusy = false; if (active()) scheduleWatch(nextDelay); });
+  }
+  function disableWatch() { wanted = false; generation++; clearTimeout(watchTimer); watchTimer = null; }
   var port = Number(options.port || 32191), base = 'http://127.0.0.1:' + port;
   function status() { return { installed: fs.existsSync(binary), state: phase, error: error, version: release.version, url: base }; }
   function echo() {
@@ -40,7 +63,8 @@ function create(options) {
       req.setTimeout(700, function () { req.destroy(new Error('Нет ответа')); }); req.on('error', reject);
     });
   }
-  function stop() {
+  function stop() { disableWatch(); return terminate(); }
+  function terminate() {
     if (stopping) return stopping;
     if (!child) { phase = 'stopped'; return Promise.resolve(); }
     var current = child; phase = 'stopping';
@@ -51,6 +75,7 @@ function create(options) {
     return stopping;
   }
   function launch() {
+    var version = generation;
     if (phase === 'running' && child) return Promise.resolve(status());
     if (!fs.existsSync(binary)) return Promise.reject(new Error('Сначала нажмите «Установить и запустить»'));
     // Refuse an occupied port rather than connecting to an unrelated process.
@@ -58,6 +83,7 @@ function create(options) {
       var probe = require('net').createServer(); probe.once('error', function () { reject(new Error('Порт ' + port + ' уже занят')); });
       probe.listen(port, '127.0.0.1', function () { probe.close(resolve); });
     }).then(function () {
+      if (!wanted || version !== generation) throw new Error('Запуск TorrServer отменён');
       mkdir(dir); var dataDir = path.join(dir, 'data'); mkdir(dataDir);
       // The pinned release stores settings under BitTorr in settings.json.
       // Apply memory limits before startup; /settings set restarts the torrent engine.
@@ -69,7 +95,7 @@ function create(options) {
       var fd = fs.openSync(log, 'a', 384);
       phase = 'starting'; error = '';
       var current = child = cp.spawn(binary, ['--ip', '127.0.0.1', '--port', String(port), '--path', dataDir], {stdio: ['ignore', fd, fd], env: Object.assign({}, process.env, {GOMEMLIMIT: '96MiB', GOGC: '50'})}); fs.closeSync(fd);
-      current.on('error', function (e) { error = e.message; phase = 'error'; child = null; });
+      current.on('error', function (e) { if (child !== current) return; error = e.message; phase = 'error'; child = null; });
       current.on('exit', function (code, signal) { if (child === current) child = null; if (phase !== 'stopped' && !stopping) { phase = 'error'; error = 'TorrServer завершился (' + (signal || code) + '). См. ' + log; } });
       var deadline = Date.now() + 15000;
       return new Promise(function (resolve, reject) {
@@ -77,29 +103,31 @@ function create(options) {
           if (child !== current) return reject(new Error(error || 'TorrServer завершился'));
           echo().then(function () { if (child !== current) return reject(new Error(error || 'TorrServer завершился')); phase = 'running'; resolve(status()); }, function () {
             if (Date.now() < deadline) return setTimeout(check, 250);
-            stop().then(function () { reject(new Error('TorrServer не запустился. См. ' + log)); });
+            terminate().then(function () { reject(new Error('TorrServer не запустился. См. ' + log)); });
           });
         } check();
       });
     });
   }
   function start() {
+    wanted = true;
     if (starting) return starting;
-    starting = launch().then(function (value) { starting = null; return value; }, function (e) { starting = null; throw e; });
+    starting = launch().then(function (value) { starting = null; nextDelay = retryDelay; scheduleWatch(watchInterval); return value; }, function (e) { starting = null; scheduleWatch(nextDelay); throw e; });
     return starting;
   }
   function run(install, ready) {
     if (job || starting || stopping) return status();
     if (phase === 'running' && child) { if (ready) ready(); return status(); }
+    wanted = true; var version = generation;
     phase = install ? 'installing' : 'starting'; error = '';
     job = Promise.resolve().then(function () {
       if (!install || fs.existsSync(binary)) return;
       if (process.env.TW_TORRSERVER_BINARY) throw new Error('В APK отсутствует встроенный TorrServer. Переустановите приложение.');
       var name = asset(process.platform, process.arch); mkdir(dir);
       return download('https://github.com/YouROK/TorrServer/releases/download/' + release.version + '/' + name, binary + '.tmp', release.hashes[name], 0).then(function () { fs.chmodSync(binary + '.tmp', 448); fs.renameSync(binary + '.tmp', binary); });
-    }).then(start).then(function () { if (ready) ready(); }).catch(function (e) { phase = 'error'; error = e.message; try { fs.unlinkSync(binary + '.tmp'); } catch (_) {} }).then(function () { job = null; });
+    }).then(function () { if (wanted && generation === version) return start(); }).then(function () { if (wanted && generation === version && ready) ready(); }).catch(function (e) { if (!wanted || generation !== version) return; phase = 'error'; error = e.message; try { fs.unlinkSync(binary + '.tmp'); } catch (_) {} }).then(function () { job = null; if (wanted) scheduleWatch(nextDelay); });
     return status();
   }
-  return {status: status, run: run, start: start, stop: stop, busy: function () { return !!job || !!starting || !!stopping; }, kill: function () { if (child) child.kill('SIGKILL'); }, base: base};
+  return {status: status, run: run, start: start, stop: stop, busy: function () { return !!job || !!starting || !!stopping; }, kill: function () { disableWatch(); if (child) child.kill('SIGKILL'); }, base: base};
 }
 module.exports = {create: create, asset: asset};

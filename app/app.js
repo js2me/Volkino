@@ -133,7 +133,7 @@
   function settingsView(){
     var p=el('div','panel');content.appendChild(p);if(window.TWAudio)disposeAudioSettings=window.TWAudio.mountSettings(p.appendChild(el('div')),state.config.audioFix||'off');p.appendChild(el('p','muted','Выберите TorrServer на этом устройстве или подключите внешний сервер.'));
     var step=field(p,'Шаг перемотки плеера (секунды)',seekStep(),'number','seek-step');step.min='1';step.max='3600';step.step='1';
-    var mode=field(p,'Где запускать TorrServer','','select','ts-mode');[['external','Внешний сервер'],['local','На этом устройстве']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];mode.appendChild(o);});mode.value=state.config.torrserverMode||'external';
+    var mode=field(p,'Где запускать TorrServer','','select','ts-mode');[['external','Внешний сервер'],['local','На этом устройстве']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];mode.appendChild(o);});mode.value=state.config.torrserverMode||'local';
     var local=el('div');p.appendChild(local);var status=el('p','muted','Проверяем локальный сервер…');status.id='local-server-status';local.appendChild(status);
     var android=window.navigator&&/Android/i.test(window.navigator.userAgent||'');
     local.appendChild(button(android?'Запустить':'Установить и запустить',function(){localServerAction('start');},'btn primary'));local.appendChild(button('Остановить',function(){localServerAction('stop');}));
@@ -150,7 +150,7 @@
   function filmixSettings(parent){
     var section=el('section','filmix-settings');parent.appendChild(section);section.appendChild(el('h2','','Filmix — онлайн-просмотр'));
     var transport=field(section,'Подключение Filmix','','select','filmix-transport');
-    [['web','Filmix TV — как в Media Station X'],['mobile','Мобильный API — прежнее подключение']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];transport.appendChild(o);});transport.value=state.config.filmixTransport||'mobile';
+    [['mobile','Мобильный API'],['web','Filmix TV — как в Media Station X']].forEach(function(x){var o=el('option','',x[1]);o.value=x[0];transport.appendChild(o);});transport.value=state.config.filmixTransport||'mobile';
     transport.onchange=function(){api('config',{filmixTransport:transport.value},function(error,r){if(error)return toast(error.message);state.config=r;change('settings');});};
     if(state.config.filmixTransport==='web'){
       section.appendChild(el('p','muted','Вход в Filmix TV. Пароль используется только для входа; настройки сохраняют сессию устройства.'));
@@ -230,7 +230,18 @@
     });
   }
   function saveSettings(after){var step=Number($('seek-step').value);if(!isFinite(step)||Math.floor(step)!==step||step<1||step>3600){toast('Шаг перемотки должен быть целым числом от 1 до 3600 секунд');$('seek-step').focus();return;}var data={seekStep:step,audioFix:$('audio-fix')?$('audio-fix').value:state.config.audioFix||'off',filmixApiUrl:$('filmix-api')?$('filmix-api').value:state.config.filmixApiUrl,filmixSiteUrl:$('filmix-site')?$('filmix-site').value:state.config.filmixSiteUrl,torrserverMode:$('ts-mode').value,torrserverUrl:$('ts-url').value,torrserverUsername:$('ts-user').value,searchProvider:$('search-provider').value,jacredUrl:$('jacred-url').value};if($('filmix-token')&&$('filmix-token').value)data.filmixToken=$('filmix-token').value;if($('ts-password').value)data.torrserverPassword=$('ts-password').value;if(!data.torrserverUsername)data.torrserverPassword='';if($('jacred-key').value)data.jacredApiKey=$('jacred-key').value;api('config',data,function(err,r){if(err)return toast(err.message);state.config=r;toast('Настройки сохранены');health(false);if(typeof after==='function')after();});}
-  function health(show){if(state.config.torrserverMode!=='local'&&!state.config.torrserverUrl){$('connection-light').className='';$('connection-text').textContent='Онлайн-просмотр · Filmix';return;}api('health',null,function(err,r){$('connection-light').className=err?'error':'ok';$('connection-text').textContent=err?'TorrServer недоступен':r.version;if(show)toast(err?err.message:'Соединение работает: '+r.version);});}
+  var healthTimer=null,healthGeneration=0;
+  function health(show){
+    clearTimeout(healthTimer);var generation=++healthGeneration;
+    if(state.config.torrserverMode!=='local'&&!state.config.torrserverUrl){$('connection-light').className='';$('connection-text').textContent='Онлайн-просмотр · Filmix';return;}
+    api('health',null,function(err,r){
+      if(generation!==healthGeneration)return;
+      $('connection-light').className=err?'error':'ok';
+      $('connection-text').textContent=err?'TorrServer недоступен · переподключаемся…':r.version;
+      if(show)toast(err?err.message:'Соединение работает: '+r.version);
+      healthTimer=setTimeout(function(){health(false);},5000);
+    });
+  }
   function magnetView(){var p=el('div','panel');content.appendChild(p);p.appendChild(el('p','','Вставьте magnet-ссылку или адрес .torrent. Файлы подготовит выбранный TorrServer.'));var input=field(p,'Ссылка на торрент','','text','magnet-link');input.placeholder='magnet:?xt=urn:btih:…';p.appendChild(button('Открыть торрент',function(){openTorrent(input.value,'Торрент по ссылке');},'btn primary'));focusFirst();}
   function openTorrent(link,name,resumeItem){
     state.source='torrent';change('files');state.hash='';state.torrent=null;state.files=[];title.textContent=name;message('Получаем список файлов…','TorrServer ищет участников раздачи и метаданные. Это может занять до двух минут.',true);
