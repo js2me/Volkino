@@ -29,7 +29,7 @@ const staging = path.join(generated, 'runtime');
 fs.rmSync(staging, { recursive: true, force: true });
 fs.mkdirSync(path.join(staging, 'app'), { recursive: true });
 fs.mkdirSync(assets, { recursive: true });
-for (const name of ['index.html', 'app.js', 'catalog.js', 'catalog.css', 'history.js', 'playback.js', 'icon.png', 'wolf.png']) {
+for (const name of ['index.html', 'catalog.js', 'catalog.css', 'icon.png', 'wolf.png']) {
   fs.copyFileSync(path.join(root, 'app', name), path.join(staging, 'app', name));
 }
 fs.cpSync(path.join(root, 'server'), path.join(staging, 'server'), { recursive: true });

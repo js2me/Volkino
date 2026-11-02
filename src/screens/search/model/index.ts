@@ -35,7 +35,7 @@ export class SearchVM extends VM {
 
   constructor(params: ViewModelParams) {
     super(params);
-    const session = this.globals.app.state;
+    const session = this.globals.state;
     this.query = session.query;
     this.results = session.results;
     this.sort = session.sort;
@@ -62,8 +62,7 @@ export class SearchVM extends VM {
           .slice()
           .sort(
             (a, b) =>
-              this.globals.app.sizeNumber(a.size) -
-              this.globals.app.sizeNumber(b.size),
+              this.globals.sizeNumber(a.size) - this.globals.sizeNumber(b.size),
           )
       : this.results;
   }
@@ -72,12 +71,12 @@ export class SearchVM extends VM {
   }
   setSort(sort: string) {
     this.sort = sort;
-    this.globals.app.state.sort = sort;
+    this.globals.state.sort = sort;
   }
   search(query = this.query) {
     this.query = query.trim();
     if (this.query.length < 2) {
-      this.globals.app.toast('Введите хотя бы два символа');
+      this.globals.toast('Введите хотя бы два символа');
       return;
     }
     const request = ++this.request;
@@ -86,12 +85,12 @@ export class SearchVM extends VM {
     this.error = '';
     this.status = 'Ищем раздачи…';
     this.results = [];
-    Object.assign(this.globals.app.state, {
+    Object.assign(this.globals.state, {
       query: this.query,
       results: [],
       searchStatus: { text: this.status },
     });
-    this.globals.app.api<{ results: SearchResult[]; hint?: string }>(
+    this.globals.api<{ results: SearchResult[]; hint?: string }>(
       'search?q=' + encodeURIComponent(this.query),
       null,
       (error, data) => {
@@ -105,7 +104,7 @@ export class SearchVM extends VM {
             this.results = data.results;
             this.status = data.hint || 'Раздачи не найдены.';
           }
-          Object.assign(this.globals.app.state, {
+          Object.assign(this.globals.state, {
             results: this.results,
             searchStatus: { text: this.status, error: !!error },
           });
@@ -115,11 +114,11 @@ export class SearchVM extends VM {
     );
   }
   filmix() {
-    this.globals.app.state.query = this.query.trim();
-    this.globals.app.filmix(this.query.trim());
+    this.globals.state.query = this.query.trim();
+    this.globals.filmixSearch(this.query.trim());
   }
   protected willUnmount() {
     this.request++;
-    if (this.loading) this.globals.app.state.searchStatus = null;
+    if (this.loading) this.globals.state.searchStatus = null;
   }
 }

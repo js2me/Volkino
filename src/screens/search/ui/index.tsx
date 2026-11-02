@@ -85,12 +85,12 @@ export const Search = withViewModel(SearchVM, () => {
                 number={index() + 1}
                 title={result.title}
                 meta={[
-                  { text: model.globals.app.bytes(result.size) },
+                  { text: model.globals.bytes(result.size) },
                   { text: '↑ ' + result.seeders + ' сидов', cls: 'seed' },
                   { text: result.tracker },
                   { text: result.quality },
                 ]}
-                onOpen={() => model.globals.app.openSearch(result)}
+                onOpen={() => model.globals.openSearch(result)}
               />
             )}
           </For>

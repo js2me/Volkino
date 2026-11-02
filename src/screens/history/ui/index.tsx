@@ -27,7 +27,7 @@ export const History = withViewModel(HistoryVM, () => {
         }
       >
         <p class="muted">
-          {model.items.length} из {model.globals.app.historyLimit} · последние
+          {model.items.length} из {model.globals.historyLimit} · последние
           открытые видео · старые записи удаляются автоматически
         </p>
         <For each={model.items}>
@@ -39,15 +39,15 @@ export const History = withViewModel(HistoryVM, () => {
                 {
                   text:
                     item.position > 0
-                      ? model.globals.app.time(item.position) +
+                      ? model.globals.time(item.position) +
                         ' / ' +
-                        model.globals.app.time(item.duration)
+                        model.globals.time(item.duration)
                       : 'Открыто · просмотр ещё не начат',
                 },
                 { text: dateLabel(item.updated) },
                 { text: item.torrentTitle || item.fileName },
               ]}
-              onOpen={() => model.globals.app.resume(item)}
+              onOpen={() => model.globals.resume(item)}
             />
           )}
         </For>

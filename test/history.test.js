@@ -1,5 +1,5 @@
 'use strict';
-const {test}=require('node:test');const assert=require('node:assert/strict');const history=require('../app/history');
+const {test}=require('node:test');const assert=require('node:assert/strict');const history=require('../work/test-models/src/app/services/history.js');
 function entry(id,position=0){return{hash:id.toString(16).padStart(40,'0'),fileId:1,title:'Video '+id,link:'magnet:?xt=urn:btih:'+id.toString(16).padStart(40,'0'),position,updated:id};}
 function storage(initial){let value=initial;return{getItem(){return value;},setItem(key,next){assert.equal(key,'tw-history');value=next;},raw(){return value;}};}
 test('retains exactly the newest 100 entries in memory and after reload, evicting the oldest tail',()=>{

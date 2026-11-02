@@ -61,9 +61,9 @@ test('mock Filmix has series, voices and seasons; settings stay in memory', asyn
   await expect(page.locator('.home-section').first()).toBeVisible();
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await expect(page.locator('#ts-url')).toHaveValue('http://demo-only:8090');
-  const transport = await page.locator('#filmix-transport').elementHandle();
   await page.locator('#filmix-transport').selectOption('mobile');
-  await expect.poll(() => transport.evaluate(element => element.isConnected)).toBe(false);
+  await expect(page.locator('#filmix-transport')).toHaveValue('mobile');
+  await expect(page.locator('#filmix-api')).toBeVisible();
   await page.getByRole('button', { name: 'Получить код Filmix', exact: true }).click();
   await expect(page.locator('#filmix-status')).toContainText('DEMO-1234');
   await page.getByRole('button', { name: 'Я ввёл код', exact: true }).click();

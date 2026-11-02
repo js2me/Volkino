@@ -30,7 +30,7 @@ export class TorrentsVM extends VM {
     const request = ++this.request;
     this.loading = true;
     this.error = '';
-    this.globals.app.api<ServerTorrent[]>('torrents', null, (error, items) => {
+    this.globals.api<ServerTorrent[]>('torrents', null, (error, items) => {
       if (request !== this.request || this.unmountSignal.aborted) return;
       runInAction(() => {
         this.loading = false;

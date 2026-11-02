@@ -173,7 +173,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/stream' && ['GET','HEAD'].indexOf(req.method) >= 0) { stream(req, res, q); return null; }
     if (route.indexOf('/api/') === 0) { json(res, 404, { error: 'Метод не найден' }); return null; }
     if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { error: 'Метод не поддерживается' }); return null; }
-    var assets = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/catalog.js': 'catalog.js', '/history.js': 'history.js', '/playback.js': 'playback.js', '/catalog.css': 'catalog.css', '/icon.png': 'icon.png', '/wolf.png': 'wolf.png' };
+    var assets = { '/': 'index.html', '/index.html': 'index.html', '/catalog.js': 'catalog.js', '/catalog.css': 'catalog.css', '/icon.png': 'icon.png', '/wolf.png': 'wolf.png' };
     var file = assets[route]; if (!file) { json(res, 404, { error: 'Не найдено' }); return null; }
     var mime = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
     res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self'; frame-ancestors 'none'" });

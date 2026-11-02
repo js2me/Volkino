@@ -30,6 +30,10 @@ select {
 button {
   color: inherit;
 }
+#app,
+.app-root {
+  height: 100%;
+}
 #shell {
   height: 100%;
   display: flex;

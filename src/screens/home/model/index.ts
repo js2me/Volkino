@@ -15,14 +15,13 @@ export class HomeVM extends VM {
       );
       (
         cards.find(
-          (card) =>
-            card.dataset.catalogId === this.globals.app.state.lastHomeId,
+          (card) => card.dataset.catalogId === this.globals.state.lastHomeId,
         ) ||
         cards[0] ||
         root.querySelector<HTMLButtonElement>('button')
       )?.focus();
       const main = document.getElementById('main');
-      if (main) main.scrollTop = this.globals.app.state.homeScroll || 0;
+      if (main) main.scrollTop = this.globals.state.homeScroll || 0;
     });
   }
 
@@ -36,7 +35,7 @@ export class HomeVM extends VM {
     });
   }
   protected didMount() {
-    const cached = this.globals.app.state.homeData;
+    const cached = this.globals.state.homeData;
     if (cached && Date.now() - cached.updatedAt < 3 * 60 * 60 * 1000) {
       this.data = cached;
       this.restoreFocus();
@@ -46,14 +45,14 @@ export class HomeVM extends VM {
     const request = ++this.request;
     this.loading = true;
     this.error = '';
-    this.globals.app.api<HomeData>('catalog/home', null, (error, data) => {
+    this.globals.api<HomeData>('catalog/home', null, (error, data) => {
       if (this.unmountSignal.aborted || request !== this.request) return;
       runInAction(() => {
         this.loading = false;
         if (error) this.error = error.message;
         else {
           this.data = data;
-          this.globals.app.state.homeData = data;
+          this.globals.state.homeData = data;
         }
         this.restoreFocus();
       });

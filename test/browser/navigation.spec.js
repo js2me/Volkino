@@ -110,7 +110,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1280, height: 80
   });
 }
 
-test('legacy settings and Filmix selectors share remote selection and restore rebuilt controls', async ({ page }) => {
+test('settings and Filmix selectors share remote selection and restore controls', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.home-section')).toHaveCount(3);
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();

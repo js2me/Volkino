@@ -44,10 +44,10 @@ export const Torrents = withViewModel(TorrentsVM, () => {
                 number={index() + 1}
                 title={item.title || item.name || item.hash}
                 meta={[
-                  { text: model.globals.app.bytes(item.torrent_size) },
+                  { text: model.globals.bytes(item.torrent_size) },
                   { text: item.stat_string },
                 ]}
-                onOpen={() => model.globals.app.openTorrent(item)}
+                onOpen={() => model.globals.openTorrent(item)}
               />
             )}
           </For>

@@ -27,12 +27,6 @@ export function mockAppPlugin() {
           res.end(html);
         } catch (error) { next(error); }
       });
-      // The ES5 shell uses classic scripts, which are outside Vite's module graph.
-      server.watcher.on('change', file => {
-        if (/\/app\/(index\.html|app\.js|history\.js|playback\.js)$/.test(file)) {
-          server.ws.send({ type: 'full-reload' });
-        }
-      });
       server.config.logger.info('Локальные моки включены. Сценарии: ?mock=empty, ?mock=error, ?mock=slow');
     },
   };

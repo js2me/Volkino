@@ -1,5 +1,5 @@
 'use strict';
-const {test}=require('node:test');const assert=require('node:assert/strict');const playback=require('../app/playback');
+const {test}=require('node:test');const assert=require('node:assert/strict');const playback=require('../work/test-models/src/app/services/seek.js');
 function harness(){
   let now=0,id=0,tasks=new Map(),position=100,assignments=[],errors=[],started=[],finished=0,previews=[];
   const video={duration:1000,readyState:4,paused:false,seeking:false,play(){this.paused=false;return Promise.resolve();}};

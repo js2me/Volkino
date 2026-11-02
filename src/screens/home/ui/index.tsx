@@ -25,7 +25,7 @@ export const Home = withViewModel(HomeVM, () => {
           <button class="btn primary" onClick={() => model.load()}>
             Повторить
           </button>
-          <button class="btn" onClick={() => model.globals.app.search()}>
+          <button class="btn" onClick={() => model.globals.search()}>
             Перейти к поиску
           </button>
         </ScreenMessage>
@@ -37,26 +37,26 @@ export const Home = withViewModel(HomeVM, () => {
               <p class="muted">
                 Выберите фильм или сериал — смотрите через торрент или Filmix.
               </p>
-              <button class="btn" onClick={() => model.globals.app.search()}>
+              <button class="btn" onClick={() => model.globals.search()}>
                 Поиск по названию
               </button>
             </div>
-            <Show when={model.globals.app.history().length}>
+            <Show when={model.globals.history().length}>
               <section class="home-section home-continue">
                 <h2>Продолжить просмотр</h2>
                 <div class="continue-row">
-                  <For each={model.globals.app.history().slice(0, 8)}>
+                  <For each={model.globals.history().slice(0, 8)}>
                     {(item) => (
                       <button
                         class="continue-card"
-                        onClick={() => model.globals.app.resume(item)}
+                        onClick={() => model.globals.resume(item)}
                       >
                         <span class="continue-name">{item.title}</span>
                         <span class="muted">
                           {item.position > 0
-                            ? model.globals.app.time(item.position) +
+                            ? model.globals.time(item.position) +
                               ' / ' +
-                              model.globals.app.time(item.duration)
+                              model.globals.time(item.duration)
                             : 'Открыто · начать просмотр'}
                         </span>
                         <span class="continue-track">
@@ -93,9 +93,7 @@ export const Home = withViewModel(HomeVM, () => {
                       {(item) => (
                         <PosterCard
                           item={item}
-                          onOpen={() =>
-                            model.globals.app.openItem(item, 'home')
-                          }
+                          onOpen={() => model.globals.openItem(item, 'home')}
                         />
                       )}
                     </For>

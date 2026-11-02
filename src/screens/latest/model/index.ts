@@ -105,7 +105,7 @@ export class LatestVM extends VM {
     this.detailsFailed.clear();
     if (refresh) this.detailsCache.clear();
     this.select();
-    this.globals.app.api<LatestPage>(
+    this.globals.api<LatestPage>(
       `latest?page=${this.session.page}${refresh ? '&refresh=1' : ''}`,
       null,
       (error, data) => {
@@ -133,7 +133,7 @@ export class LatestVM extends VM {
     const request = ++this.request;
     this.loadingMore = true;
     this.moreError = '';
-    this.globals.app.api<LatestPage>(
+    this.globals.api<LatestPage>(
       `latest?page=${previous.page + 1}`,
       null,
       (error, data) => {
@@ -228,7 +228,7 @@ export class LatestVM extends VM {
       if (this.detailsInFlight.has(item.filmixId)) continue;
       const epoch = this.detailsEpoch;
       this.detailsInFlight.set(item.filmixId, epoch);
-      this.globals.app.api<LatestDetails>(
+      this.globals.api<LatestDetails>(
         'filmix/details?id=' + item.filmixId,
         null,
         (error, details) => {
@@ -261,7 +261,7 @@ export class LatestVM extends VM {
 
   open(item: LatestItem, scroll: number) {
     Object.assign(this.session, { selectedId: item.id, scroll });
-    this.globals.app.openFilmix(item.filmixId, item.title);
+    this.globals.openFilmix(item.filmixId, item.title);
   }
 
   protected willUnmount() {

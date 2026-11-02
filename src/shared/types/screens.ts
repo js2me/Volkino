@@ -58,23 +58,3 @@ export interface AppSession {
   sort: string;
   searchStatus: { text: string; error?: boolean } | null;
 }
-
-/** Functions supplied once by the legacy shell while it owns navigation and playback. */
-export interface AppServices {
-  api: ScreenAPI;
-  state: AppSession;
-  history(): HistoryItem[];
-  historyLimit: number;
-  time(seconds: number): string;
-  bytes(size: number | string): string;
-  sizeNumber(size: number | string): number;
-  toast(message: string): void;
-  openItem(item: CatalogItem, origin: 'home' | 'catalog'): void;
-  search(): void;
-  openFilmix(id: number, title: string): void;
-  filmix(query: string): void;
-  openSearch(result: SearchResult): void;
-  openTorrent(torrent: ServerTorrent): void;
-  resume(item: HistoryItem): void;
-  clearHistory(): void;
-}

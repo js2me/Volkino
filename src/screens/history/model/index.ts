@@ -13,11 +13,11 @@ export class HistoryVM extends VM {
 
   constructor(params: ViewModelParams) {
     super(params);
-    this.items = this.globals.app.history();
+    this.items = this.globals.history();
     makeObservable(this, { items: observable.ref, clear: action });
   }
   clear() {
-    this.globals.app.clearHistory();
+    this.globals.clearHistory();
     this.items = [];
     document.querySelector<HTMLButtonElement>('[data-view="history"]')?.focus();
   }

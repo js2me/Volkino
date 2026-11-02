@@ -1,196 +1,66 @@
 'use strict';
-const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const hash='0123456789abcdef0123456789abcdef01234567';
-const files=[{id:1,path:'Season 1/Episode 01.mkv',length:1000},{id:2,path:'Season 1/Episode 02.mkv',length:1000},{id:3,path:'Season 2/Episode 01.mkv',length:1000}];
-function boot(saved=[],nativePlayer){
-  let document,clock=100000,nextId=0;const tasks=new Map(),requests=[],stored={};
-  class Element{
-    constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.style={};this.attributes={};this.listeners={};this.className='';this._text='';}
-    appendChild(e){e.parentNode=this;this.children.push(e);return e;}
-    set innerHTML(v){this.children=[];this._text=v;}get innerHTML(){return this._text;}
-    set textContent(v){this._text=String(v);this.children=[];}get textContent(){return this._text+this.children.map(e=>e.textContent).join('');}
-    setAttribute(k,v){this.attributes[k]=v;}getAttribute(k){return this.attributes[k]||null;}
-    removeAttribute(k){delete this.attributes[k];}
-    addEventListener(type,fn){(this.listeners[type]||(this.listeners[type]=[])).push(fn);}
-    emit(type,event={}){(this.listeners[type]||[]).forEach(fn=>fn(event));}
-    focus(){document.activeElement=this;if(this.onfocus)this.onfocus();}blur(){document.activeElement=document.body;}
-    contains(e){return this===e||this.children.some(c=>c.contains(e));}
-    click(){if(this.onclick)this.onclick({preventDefault(){},stopPropagation(){}});}
-    scrollIntoView(){}getBoundingClientRect(){return {left:0,width:1000,top:0,height:40};}
-    querySelectorAll(selector){const out=[],parts=selector.split(',');function walk(e){e.children.forEach(c=>{if(parts.some(s=>s[0]==='.'?c.className.split(' ').includes(s.slice(1)):c.tagName===s.toUpperCase()))out.push(c);walk(c);});}walk(this);return out;}
-    querySelector(s){return this.querySelectorAll(s)[0]||null;}
-  }
-  const body=new Element('body');const elements={};
-  function node(id,parent=body,tag='div'){const el=parent.appendChild(new Element(tag));el.id=id;elements[id]=el;return el;}
-  node('content');node('main');node('page-title');node('toast');node('connection-light');node('connection-text');
-  const player=node('player'),video=node('video',player,'video');
-  for(const id of ['player-options','player-top','player-controls','playing-title','playing-status','player-time','player-progress'])node(id,player);
-  for(const id of ['player-audio','player-fit','player-options-close','touch-exit','touch-rewind','touch-forward','touch-pause','touch-episodes','touch-audio','player-back'])node(id,player,'button');['player-audio','player-fit','player-options-close'].forEach(id=>elements['player-options'].appendChild(elements[id]));node('player-timeline',player);const episodes=node('player-episodes',player);node('episode-list',episodes);
-  document={body,activeElement:body,createElement:t=>new Element(t),createTextNode(text){const e=new Element();e.textContent=text;return e;},getElementById(id){if(elements[id])return elements[id];let found=null;function walk(e){if(e.id===id)found=e;e.children.forEach(walk);}walk(body);return found;},querySelectorAll:s=>body.querySelectorAll(s),addEventListener:body.addEventListener.bind(body)};
-  Object.assign(video,{readyState:0,paused:true,seeking:false,duration:NaN,currentTime:0,load(){this.readyState=0;this.duration=NaN;this.currentTime=0;},pause(){this.paused=true;this.emit('pause');},play(){this.paused=false;return Promise.resolve();}});
-  function later(fn,ms){tasks.set(++nextId,{fn,at:clock+ms});return nextId;}
-  function advance(ms){const end=clock+ms;for(;;){const next=[...tasks].sort((a,b)=>a[1].at-b[1].at)[0];if(!next||next[1].at>end)break;clock=next[1].at;tasks.delete(next[0]);next[1].fn();}clock=end;}
-  function XHR(){}XHR.prototype.open=function(method,url){this.url=url;};XHR.prototype.setRequestHeader=function(){};XHR.prototype.send=function(data){this.data=data;requests.push(this);};
-  const window={addEventListener(){},TWNativePlayer:nativePlayer};
-  const source=fs.readFileSync(require.resolve('../app/app.js'),'utf8').replace('}());','window.test={state:state,playFile:playFile,stopPlayer:stopPlayer,renderFiles:renderFiles,seekControl:seekControl,history:function(){return history;},openFilmix:openFilmix,resumeHistory:resumeHistory,searchFilmix:searchFilmix};}());');
-  class FakeDate extends Date{static now(){return clock;}}
-  vm.runInNewContext(source,{document,window,XMLHttpRequest:XHR,localStorage:{getItem(){return JSON.stringify(saved);},setItem(k,v){stored[k]=v;}},TWHistory:require('../app/history'),TWPlayback:Object.assign({},require('../app/playback'),{create(video,options){return require('../app/playback').create(video,Object.assign(options,{setTimeout:later,clearTimeout:id=>tasks.delete(id)}));}}),Date:FakeDate,setTimeout:later,clearTimeout:id=>tasks.delete(id)});
-  Object.assign(window.test.state,{hash,torrent:{title:'Series'},files:files.map(f=>({...f})),originalLink:'magnet:?xt=urn:btih:'+hash,view:'files'});
-  function key(code){body.emit('keydown',{keyCode:code,preventDefault(){}});body.emit('keyup',{keyCode:code,preventDefault(){}});}
-  function ready(position=100,event='playing'){video.duration=1000;video.currentTime=position;video.readyState=4;video.paused=false;video.emit(event);}
-  function play(){window.test.playFile(files[0],0);advance(100);ready();}
-  function reply(route,value,status=200){const r=requests.find(r=>!r.done&&r.url.startsWith('/api/'+route));assert.ok(r,'pending '+route);r.done=true;r.status=status;r.responseText=JSON.stringify(value);r.onload();}
-  return {...window.test,window,document,video,player,elements,advance,key,ready,play,reply,requests,stored,tasks};
-}
-function item(id,position,duration=1000,extra={}){return {hash,fileId:id,title:'Episode',fileName:files[id-1].path,link:'magnet:?xt=urn:btih:'+hash,position,duration,...extra};}
-test('controls hide after pointer seeking and resume hiding when readiness recovers without playing event',()=>{
-  const h=boot();h.play();h.elements['player-timeline'].onclick({clientX:500,preventDefault(){},stopPropagation(){}});h.advance(250);h.video.seeking=false;h.video.currentTime=500;h.video.emit('seeked');h.advance(5000);
-  assert.equal(h.elements['player-controls'].className,'hidden');
-  h.video.readyState=2;h.video.emit('waiting');h.advance(6000);assert.equal(h.elements['player-controls'].className,'');
-  h.ready(520,'timeupdate');h.advance(5000);assert.equal(h.elements['player-controls'].className,'hidden');
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {boot,files,hash}=require('./helpers/models');
+function item(id,position,duration=1000,extra={}){return{hash,fileId:id,title:'Episode',fileName:files[id-1].path,torrentTitle:'Series',link:'magnet:?xt=urn:btih:'+hash,position,duration,...extra};}
+function onlinePost(){return{title:'Online Series',maxQuality:720,voices:['Dub','Original'],seasons:[1,2],isSeries:true,files:[{id:10001,path:'Сезон 1/Серия 1',season:1,voice:'Dub',qualities:[720,480]},{id:10002,path:'Сезон 1/Серия 2',season:1,voice:'Dub',qualities:[720,480]},{id:10001,path:'Сезон 1/Серия 1',season:1,voice:'Original',qualities:[720]},{id:20001,path:'Сезон 2/Серия 1',season:2,voice:'Dub',qualities:[720]}]};}
+test('controls hide after seeking and recover without a playing event',t=>{
+ const h=boot(t);h.play();h.player.seek(100);h.advance(250);h.video.readyState=2;h.advance(5000);assert.equal(h.player.overlay,true);
+ h.video.readyState=4;h.video.emit('seeked');h.advance(5000);assert.equal(h.player.overlay,false);
 });
-test('time updates and stationary pointer jitter do not keep controls visible; pause keeps them visible',()=>{
-  const h=boot();h.play();h.player.emit('mousemove',{clientX:200,clientY:200});
-  for(let i=0;i<6;i++){h.advance(1000);h.video.emit('timeupdate');h.player.emit('mousemove',{clientX:201,clientY:201});}
-  assert.equal(h.elements['player-controls'].className,'hidden');h.video.pause();h.advance(6000);assert.equal(h.elements['player-controls'].className,'');
-  h.key(13);h.video.emit('playing');h.advance(5000);assert.equal(h.elements['player-controls'].className,'hidden');
+test('time updates and pointer jitter do not keep controls visible; pause keeps them visible',t=>{
+ const h=boot(t);h.play();h.player.onMouseMove({clientX:100,clientY:100});h.advance(3000);h.video.emit('timeupdate');h.player.onMouseMove({clientX:102,clientY:101});h.advance(2000);assert.equal(h.player.overlay,false);
+ h.video.pause();h.advance(6000);assert.equal(h.player.overlay,true);
 });
-test('Down shows only sibling episodes; arrows select without seeking; OK saves outgoing progress and resumes selected file',()=>{
-  const h=boot([item(2,300)]);h.renderFiles();const returnFocus=h.document.activeElement;h.play();h.video.currentTime=240;h.key(40);
-  const cards=h.elements['episode-list'].querySelectorAll('button');assert.equal(cards.length,2);assert.equal(h.document.activeElement,cards[0]);assert.equal(cards[0].getAttribute('aria-current'),'true');
-  h.key(39);assert.equal(h.document.activeElement,cards[1]);assert.equal(h.seekControl.target(),null);h.key(13);
-  assert.equal(h.state.playing.file.id,2);assert.equal(h.state.resume,300);assert.equal(h.history().find(x=>x.fileId===1).position,240);assert.equal(h.state.episodesOpen,false);
-  h.advance(100);h.ready(0,'loadedmetadata');assert.equal(h.video.currentTime,300);h.advance(5000);assert.equal(h.state.playing.file.id,2);
-  h.stopPlayer();assert.equal(h.document.activeElement,returnFocus);
+test('episode picker contains only siblings and switching saves outgoing progress and resumes the next file',t=>{
+ const h=boot(t,[item(2,300)]);h.play();h.video.currentTime=180;h.key(40);assert.deepEqual(h.player.episodeFiles.map(f=>f.id),[1,2]);
+ h.player.selectEpisode(h.player.episodeFiles[1]);assert.equal(h.app.history().find(f=>f.fileId===1).position,180);assert.equal(h.player.playing.file.id,2);h.advance(100);h.ready(0,'loadedmetadata');assert.equal(h.video.currentTime,300);
 });
-test('episode picker auto hides; Back closes picker and settings before leaving video',()=>{
-  const h=boot();h.play();h.key(40);h.advance(5000);assert.equal(h.state.episodesOpen,false);assert.equal(h.elements['player-controls'].className,'hidden');assert.equal(h.document.activeElement,h.video);
-  h.key(40);h.key(461);assert.ok(h.state.playing);assert.equal(h.state.episodesOpen,false);h.key(38);assert.equal(h.state.optionsOpen,true);h.key(461);assert.ok(h.state.playing);assert.equal(h.state.optionsOpen,false);h.key(461);assert.equal(h.state.playing,null);
+test('episode picker auto hides; Back closes picker and settings before exiting playback',t=>{
+ const h=boot(t);h.play();h.key(40);h.advance(5000);assert.equal(h.player.episodesOpen,false);
+ h.key(40);h.key(461);assert.ok(h.player.playing);assert.equal(h.player.episodesOpen,false);h.key(38);assert.equal(h.player.optionsOpen,true);h.key(461);assert.ok(h.player.playing);h.key(461);assert.equal(h.player.playing,null);
 });
-test('file cards show unwatched, partial and complete progress and ended marks the current file complete',()=>{
-  const h=boot([item(1,250),item(2,960)]);h.renderFiles();const fills=h.elements.content.querySelectorAll('.file-watch-fill');assert.deepEqual(fills.map(x=>x.style.width),['25%','100%','0%']);
-  h.play();h.video.currentTime=1000;h.video.emit('ended');assert.equal(h.history().find(x=>x.fileId===1).completed,true);assert.equal(fills[0].style.width,'100%');assert.equal(h.state.playing,null);
+test('progress distinguishes partial, complete and unwatched files; ended records completion',t=>{
+ const h=boot(t,[item(1,250),item(2,960)]);assert.deepEqual(files.map(f=>h.app.fileProgress(f)),[25,100,0]);h.play();h.video.currentTime=1000;h.video.emit('ended');assert.equal(h.app.history().find(f=>f.fileId===1).completed,true);assert.equal(h.player.playing,null);
 });
-
-test('switching episodes cancels the previous startup deadline and late preload errors',()=>{
- const h=boot();h.play();h.advance(10000);h.key(40);h.key(39);h.key(13);const current=h.state.playing;
- const oldPreload=h.requests.find(r=>r.url==='/api/preload');oldPreload.status=400;oldPreload.responseText=JSON.stringify({error:'old error'});oldPreload.onload();
- assert.doesNotMatch(h.elements['playing-status'].textContent,/old error/);h.advance(50000);assert.equal(h.state.playing,current);assert.equal(current.failed,undefined);
+test('episode switches cancel old deadlines and late preload failures',t=>{
+ const h=boot(t);h.play();h.advance(10000);h.player.selectFile(files[1]);const current=h.player.playing;h.reply('preload',null,new Error('old error'));assert.doesNotMatch(h.player.status,/old error/);h.advance(100);h.ready();h.advance(50000);assert.equal(h.player.playing,current);assert.equal(current.failed,undefined);
 });
-
-function onlinePost(){return {id:42,title:'Online Series',maxQuality:720,voices:['Dub','Original'],seasons:[1,2],files:[{id:10001,path:'Сезон 1/Серия 1',season:1,episode:1,voice:'Dub',qualities:[720,480]},{id:10002,path:'Сезон 1/Серия 2',season:1,episode:2,voice:'Dub',qualities:[720,480]},{id:10001,path:'Сезон 1/Серия 1',season:1,episode:1,voice:'Original',qualities:[720]},{id:20001,path:'Сезон 2/Серия 1',season:2,episode:1,voice:'Dub',qualities:[720]}]};}
-test('Filmix uses the shared player and episode picker without any TorrServer requests or expiring links in history',()=>{
- const h=boot();h.openFilmix(42,'Online Series');h.reply('filmix/post',onlinePost());assert.equal(h.state.files.length,2);assert.equal(h.document.getElementById('filmix-voice').value,'Dub');
- h.playFile(h.state.files[0],0);h.advance(100);const request=h.requests.find(r=>r.url==='/api/filmix/play');assert.equal(JSON.parse(request.data).quality,720);h.reply('filmix/play',{url:'/filmix-stream/temporary-grant'});h.ready(120);assert.equal(h.video.src,'/filmix-stream/temporary-grant');
- h.key(40);h.key(39);h.key(13);h.advance(100);h.reply('filmix/play',{url:'/filmix-stream/second-grant'});assert.equal(h.state.playing.file.id,10002);h.ready(200);h.stopPlayer();
- assert.equal(h.requests.some(r=>/\/api\/(preload|status)/.test(r.url)),false);assert.equal(h.history().length,2);assert.equal(h.history()[0].source,'filmix');assert.equal(h.history().find(r=>r.fileId===10001).position,120);assert.equal(h.stored['tw-history'].includes('temporary-grant'),false);assert.equal(h.stored['tw-history'].includes('filmix:42'),true);
+test('Filmix uses the shared player without TorrServer and stores stable history links',t=>{
+ const h=boot(t);h.app.openFilmix(42,'Online');h.reply('filmix/post',onlinePost());assert.equal(h.app.files.length,2);h.player.selectFile(h.app.files[0]);h.advance(100);assert.equal(h.requests.find(r=>r.route==='filmix/play').body.quality,720);h.reply('filmix/play',{url:'/filmix-stream/temporary-grant'});h.ready(120);h.player.stop();assert.equal(h.app.history()[0].source,'filmix');assert.equal(h.app.history()[0].link,'filmix:42');assert.equal(h.stored['tw-history'].includes('temporary-grant'),false);assert.equal(h.requests.some(r=>/^(preload|status)/.test(r.route)),false);
 });
-test('Filmix resume renews the stream and restores voice, season and position; late play responses cannot reopen a closed player',()=>{
- const h=boot();h.resumeHistory({source:'filmix',filmixId:42,fileId:20001,season:2,voice:'Dub',quality:720,position:330});h.reply('filmix/post',onlinePost());assert.equal(h.state.filmixSeason,2);assert.equal(h.state.playing.file.id,20001);h.advance(100);h.reply('filmix/play',{url:'/filmix-stream/renewed'});h.ready(0,'loadedmetadata');assert.equal(h.video.currentTime,330);h.stopPlayer();
- h.playFile(h.state.files[0],330);h.advance(100);h.stopPlayer();const src=h.video.src;h.reply('filmix/play',{url:'/filmix-stream/too-late'});assert.equal(h.state.playing,null);assert.equal(h.video.src,src);
+test('Filmix resume renews the stream, restores voice/season/position and ignores late playback responses',t=>{
+ const h=boot(t);h.app.resume({source:'filmix',filmixId:42,fileId:20001,season:2,voice:'Dub',quality:720,position:330});h.reply('filmix/post',onlinePost());assert.equal(h.player.playing.file.id,20001);h.advance(100);h.reply('filmix/play',{url:'/renewed'});h.ready(0,'loadedmetadata');assert.equal(h.video.currentTime,330);h.player.stop();h.player.play(h.app.files[0],330);h.advance(100);h.player.stop();h.reply('filmix/play',{url:'/too-late'});assert.equal(h.player.playing,null);assert.notEqual(h.video.src,'/too-late');
 });
-test('Filmix selectors filter seasons and voices while keeping progress shared across translations',()=>{
- const h=boot([{source:'filmix',filmixId:42,fileId:10001,position:500,duration:1000,title:'Episode',link:'filmix:42'}]);h.openFilmix(42,'Online Series');h.reply('filmix/post',onlinePost());
- const voice=h.document.getElementById('filmix-voice');voice.value='Original';voice.onchange();assert.equal(h.state.files.length,1);assert.equal(h.state.files[0].voice,'Original');assert.equal(h.elements.content.querySelector('.file-watch-fill').style.width,'50%');
- const season=h.document.getElementById('filmix-season');season.value='2';season.onchange();assert.equal(h.state.files[0].id,20001);assert.equal(h.state.filmixVoice,'Dub');
+test('Filmix filters share progress across translations and fall back to an available voice',t=>{
+ const h=boot(t,[{source:'filmix',filmixId:42,fileId:10001,position:500,duration:1000,title:'Episode',link:'filmix:42'}]);h.app.openFilmix(42,'Online');h.reply('filmix/post',onlinePost());h.screen.setFilter('voice','Original');assert.equal(h.app.files.length,1);assert.equal(h.app.fileProgress(h.app.files[0]),50);h.screen.setFilter('season','2');assert.equal(h.app.files[0].id,20001);assert.equal(h.app.filmixVoice,'Dub');
 });
-
-
-test('player arrows and media keys use the configured seek step, defaulting to 30 seconds',()=>{
-  for(const [setting,step] of [[undefined,30],[10,10],[75,75],[0,30]]){
-    for(const [key,direction] of [[37,-1],[39,1],[412,-1],[417,1]]){
-      const h=boot();h.state.config.seekStep=setting;h.play();h.key(key);
-      assert.equal(h.seekControl.target(),100+direction*step);
-      h.advance(250);assert.equal(h.video.currentTime,100+direction*step);
-    }
-  }
+for(const [setting,step] of [[undefined,30],[10,10],[75,75],[0,30]]) test('media and arrow keys honor seek setting '+setting,t=>{
+ const h=boot(t);h.app.config={seekStep:setting};h.play();for(const [code,direction]of[[37,-1],[39,1],[412,-1],[417,1]]){h.video.currentTime=100;h.player.seekControl.cancel();h.key(code);assert.equal(h.player.seekControl.target(),100+direction*step);h.advance(250);assert.equal(h.video.currentTime,100+direction*step);}
 });
-
-test('Up opens settings without pausing; unavailable audio is skipped and fit modes cycle without seeking',()=>{
-  const h=boot();h.play();h.advance(5000);h.key(38);
-  assert.equal(h.state.optionsOpen,true);assert.equal(h.elements['player-options'].className,'');
-  assert.equal(h.elements['player-audio'].disabled,true);assert.equal(h.document.activeElement,h.elements['player-fit']);
-  h.advance(10000);assert.equal(h.state.optionsOpen,true);assert.equal(h.video.paused,false);
-  for(const mode of ['cover','fill','contain']){h.key(13);assert.equal(h.video.style.objectFit,mode);}
-  assert.equal(h.seekControl.target(),null);h.key(39);assert.equal(h.document.activeElement,h.elements['player-options-close']);
-  h.key(13);assert.equal(h.state.optionsOpen,false);assert.equal(h.document.activeElement,h.video);
-  h.advance(5000);assert.equal(h.elements['player-controls'].className,'hidden');
+test('player options cycle fit modes without pausing or seeking and skip unavailable audio',t=>{
+ const h=boot(t);h.play();h.key(38);assert.equal(h.player.optionsOpen,true);assert.equal(h.player.audioDisabled,true);assert.equal(h.video.paused,false);for(const fit of ['cover','fill','contain']){h.player.cycleFit();assert.equal(h.video.style.objectFit,fit);}assert.equal(h.video.currentTime,100);
 });
-
-test('settings switch exposed audio tracks and wrap; Back closes settings before exiting playback',()=>{
-  const h=boot();h.play();h.video.audioTracks=[{label:'Русский',enabled:true},{language:'en',enabled:false}];h.key(38);
-  assert.equal(h.document.activeElement,h.elements['player-audio']);assert.match(h.elements['player-audio'].textContent,/Русский/);
-  h.key(13);assert.deepEqual(h.video.audioTracks.map(t=>t.enabled),[false,true]);assert.match(h.elements['player-audio'].textContent,/en/);
-  h.key(13);assert.deepEqual(h.video.audioTracks.map(t=>t.enabled),[true,false]);
-  h.key(39);assert.equal(h.document.activeElement,h.elements['player-fit']);h.key(13);assert.equal(h.video.style.objectFit,'cover');
-  h.key(40);assert.equal(h.state.optionsOpen,false);assert.equal(h.state.episodesOpen,false);
-  h.key(38);h.key(461);assert.ok(h.state.playing);h.key(461);assert.equal(h.state.playing,null);
-  h.play();assert.equal(h.state.optionsOpen,false);h.key(38);assert.match(h.elements['player-fit'].textContent,/обрезкой/);
+test('audio tracks wrap; Back closes settings before leaving the player',t=>{
+ const h=boot(t);h.play();h.video.audioTracks=[{enabled:true,label:'Russian'},{enabled:false,label:'Original'}];h.player.updateOptions();h.player.audioTrack();assert.equal(h.video.audioTracks[1].enabled,true);assert.equal(h.video.audioTracks[0].enabled,false);h.player.audioTrack();assert.equal(h.video.audioTracks[0].enabled,true);h.key(38);h.key(461);assert.ok(h.player.playing);assert.equal(h.player.optionsOpen,false);
 });
-
-test('settings close when changing episodes and audio track errors keep playback running',()=>{
- const h=boot();h.play();h.video.audioTracks=[{enabled:true},{get enabled(){return false;},set enabled(v){throw Error('unsupported');}}];
- h.key(38);h.key(13);assert.ok(h.state.playing);assert.match(h.elements.toast.textContent,/не поддерживает/);
- h.elements['touch-episodes'].click();assert.equal(h.state.optionsOpen,false);assert.equal(h.state.episodesOpen,true);
- h.key(39);h.key(13);assert.equal(h.state.playing.file.id,2);assert.equal(h.state.optionsOpen,false);
+test('track switching failures keep playback running and episode changes close options',t=>{
+ const h=boot(t);h.play();h.video.audioTracks=[{enabled:true},{}];Object.defineProperty(h.video.audioTracks[1],'enabled',{set(){throw new Error('Unsupported');}});h.player.audioTrack();assert.ok(h.player.playing);assert.match(h.app.toastText,/не поддерживает/);h.key(38);h.player.selectFile(files[1]);assert.equal(h.player.optionsOpen,false);
 });
-
-
-test('Android native playback bypasses WebView, preserves resume and records native progress',()=>{
- const calls=[],h=boot([item(1,240)],{play(...args){calls.push(args);}});
- h.playFile(files[0],240);h.advance(100);
- assert.equal(calls.length,1);assert.equal(calls[0][0],'/stream?hash='+hash+'&index=1');
- assert.equal(calls[0][2],240);assert.equal(calls[0][3],30);assert.equal(h.video.paused,true);
- h.advance(61000);assert.equal(h.state.playing.failed,undefined);
- const token=calls[0][4];h.window.TWAndroidPlayback({token,position:400,duration:1000});
- assert.equal(h.history()[0].position,400);
- h.window.TWAndroidPlayback({token:'stale',position:900,duration:1000,closed:true});
- assert.ok(h.state.playing);assert.equal(h.history()[0].position,400);
- h.window.TWAndroidPlayback({token,position:500,duration:1000,closed:true});
- assert.equal(h.state.playing,null);assert.equal(h.history()[0].position,500);
+test('native Android playback bypasses video, preserves resume and saves progress',t=>{
+ const calls=[];const h=boot(t,[],{play(...args){calls.push(args);}});h.player.play(files[0],125);h.advance(100);assert.equal(calls[0][2],125);assert.equal(calls[0][3],30);assert.equal(h.video.src,'');const token=calls[0][4];h.player.nativePlayback({token:'stale',position:10,duration:1000,closed:true});assert.ok(h.player.playing);h.player.nativePlayback({token,position:300,duration:1000,closed:true});assert.equal(h.player.playing,null);assert.equal(h.app.history()[0].position,300);
 });
-
-test('Filmix Android playback uses the renewed local grant and records completion',()=>{
- const calls=[],h=boot([],{play(...args){calls.push(args);}});
- h.openFilmix(42,'Online Series');h.reply('filmix/post',onlinePost());
- h.playFile(h.state.files[0],120);h.advance(100);h.reply('filmix/play',{url:'/filmix-stream/native-grant'});
- assert.equal(calls[0][0],'/filmix-stream/native-grant');assert.equal(calls[0][2],120);
- h.window.TWAndroidPlayback({token:calls[0][4],position:999,duration:1000,completed:true,closed:true});
- assert.equal(h.history()[0].completed,true);assert.equal(h.history()[0].source,'filmix');
- assert.equal(h.stored['tw-history'].includes('native-grant'),false);
+test('Filmix native playback renews its grant and records completion',t=>{
+ const calls=[];const h=boot(t,[],{play(...args){calls.push(args);}});h.app.openFilmix(42,'Online');h.reply('filmix/post',onlinePost());h.player.selectFile(h.app.files[0]);h.advance(100);h.reply('filmix/play',{url:'/grant'});assert.equal(calls[0][0],'/grant');h.player.nativePlayback({token:calls[0][4],position:1000,duration:1000,completed:true,closed:true});assert.equal(h.app.history()[0].completed,true);
 });
-
-test('touch drag previews without seeking until release, survives time updates and commits the release position',()=>{
- const h=boot();h.play();const bar=h.elements['player-timeline'];
- function pointer(type,x,id=1){bar.emit(type,{pointerId:id,pointerType:'touch',clientX:x,button:0,preventDefault(){},stopPropagation(){}});}
- pointer('pointerdown',100);pointer('pointermove',350);h.advance(6000);
- assert.equal(h.video.currentTime,100);assert.equal(h.seekControl.target(),null);
- h.video.emit('timeupdate');assert.equal(h.elements['player-progress'].style.width,'35%');
- assert.equal(h.elements['player-controls'].className,'');
- pointer('pointermove',900,2);assert.equal(h.elements['player-progress'].style.width,'35%');
- pointer('pointerup',500);assert.equal(h.seekControl.target(),500);
- bar.onclick({clientX:100,preventDefault(){},stopPropagation(){}});
- assert.equal(h.seekControl.target(),500);h.advance(250);assert.equal(h.video.currentTime,500);
+function timeline(h){return{id:'player-timeline',focus(){h.document.activeElement=this;},getBoundingClientRect(){return{left:0,width:1000};},setPointerCapture(){},releasePointerCapture(){}};}
+function pointer(target,type,x){return{currentTarget:target,type,clientX:x,pointerId:1,button:0,isPrimary:true,preventDefault(){},stopPropagation(){}};}
+test('touch dragging previews until release and time updates preserve the preview',t=>{
+ const h=boot(t);h.play();const bar=timeline(h);h.player.onPointer(pointer(bar,'pointerdown',250));h.player.onPointer(pointer(bar,'pointermove',700));assert.equal(h.video.currentTime,100);assert.equal(h.player.position,700);h.video.emit('timeupdate');assert.equal(h.player.position,700);h.player.onPointer(pointer(bar,'pointerup',800));h.advance(250);assert.equal(h.video.currentTime,800);
 });
-
-test('cancelling a touch drag restores the current position without seeking',()=>{
- const h=boot();h.play();const bar=h.elements['player-timeline'];
- const event=x=>({pointerId:1,clientX:x,button:0,preventDefault(){},stopPropagation(){}});
- bar.emit('pointerdown',event(100));bar.emit('pointermove',event(750));
- bar.emit('pointercancel',event(750));h.advance(300);
- assert.equal(h.video.currentTime,100);assert.equal(h.seekControl.target(),null);
- assert.equal(h.elements['player-progress'].style.width,'10%');
+test('cancelling a touch drag restores position without seeking',t=>{
+ const h=boot(t);h.play();const bar=timeline(h);h.player.onPointer(pointer(bar,'pointerdown',700));h.player.onPointer(pointer(bar,'pointercancel',700));assert.equal(h.player.position,100);h.advance(300);assert.equal(h.video.currentTime,100);
 });
-
-test('native episode picker receives siblings and switching saves progress before resuming the selected file',()=>{
- const calls=[],h=boot([item(2,300)],{play(...args){calls.push(args);}});
- h.playFile(files[0],0);h.advance(100);
- const episodes=JSON.parse(calls[0][5]);
- assert.equal(episodes.length,2);assert.equal(episodes[0].current,true);assert.equal(episodes[1].title,'Episode 02.mkv');
- h.window.TWAndroidPlayback({token:calls[0][4],position:240,duration:1000,closed:true,nextFileId:2});
- assert.equal(h.history().find(v=>v.fileId===1).position,240);
- assert.equal(h.state.playing.file.id,2);assert.equal(h.state.resume,300);
- h.advance(100);assert.equal(calls.length,2);assert.equal(calls[1][2],300);
- h.window.TWAndroidPlayback({token:calls[0][4],position:999,duration:1000,closed:true,nextFileId:3});
- assert.equal(h.state.playing.file.id,2);
+test('native episode picker receives siblings and saves outgoing progress before switching',t=>{
+ const calls=[];const h=boot(t,[item(2,230)],{play(...args){calls.push(args);}});h.player.play(files[0]);h.advance(100);const token=calls[0][4];assert.deepEqual(JSON.parse(calls[0][5]).map(f=>f.id),[1,2]);h.player.nativePlayback({token,position:180,duration:1000,closed:true,nextFileId:2});h.advance(100);assert.equal(calls[1][2],230);assert.equal(h.app.history().find(f=>f.fileId===1).position,180);
 });

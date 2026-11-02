@@ -137,10 +137,12 @@ export class CatalogVM extends VM {
     this.loading = true;
     this.error = '';
     this.data = null;
+    const main = document.getElementById('main');
+    if (main) main.scrollTop = 0;
     const query = (Object.keys(f) as (keyof Filters)[])
       .map((key) => `${key}=${encodeURIComponent(f[key])}`)
       .join('&');
-    this.globals.app.api<CatalogData>(
+    this.globals.api<CatalogData>(
       'catalog/browse?' + query,
       null,
       (error, data) => {
@@ -173,7 +175,7 @@ export class CatalogVM extends VM {
       .join('&');
     this.loadingMore = true;
     this.moreError = '';
-    this.globals.app.api<CatalogData>(
+    this.globals.api<CatalogData>(
       'catalog/browse?' + query,
       null,
       (error, data) => {
@@ -207,7 +209,7 @@ export class CatalogVM extends VM {
 
   open(item: CatalogItem, scroll: number) {
     Object.assign(this.globals.catalog, { selectedId: item.id, scroll });
-    this.globals.app.openItem(item, 'catalog');
+    this.globals.openItem(item, 'catalog');
   }
 
   protected willUnmount() {
