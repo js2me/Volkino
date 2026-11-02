@@ -5,7 +5,14 @@ import 'core-js/actual/queue-microtask';
 import 'core-js/actual/object/has-own';
 // mobx-view-model uses Array.at() to look up the active screen instance.
 import 'core-js/actual/array/at';
-import { mountCatalog, mountLatest, mountHome, mountSearch, mountHistory, mountTorrents } from './app';
+import {
+  mountCatalog,
+  mountLatest,
+  mountHome,
+  mountSearch,
+  mountHistory,
+  mountTorrents,
+} from './app';
 import { initializeApp } from './app/providers';
 import type { AppServices } from './shared/types/screens';
 import { installNavigation } from './app/navigation';

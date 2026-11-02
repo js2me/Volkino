@@ -7,25 +7,40 @@ export class TorrentsVM extends VM {
   items: ServerTorrent[] = [];
   loading = false;
   error = '';
-  focusRevision = 0;
   private request = 0;
+  private restoreFocus() {
+    this.afterRender((root) =>
+      root.querySelector<HTMLButtonElement>('button')?.focus(),
+    );
+  }
+
   constructor(params: ViewModelParams) {
     super(params);
-    makeObservable(this, { items: observable.ref, loading: observable, error: observable, focusRevision: observable, load: action });
+    makeObservable(this, {
+      items: observable.ref,
+      loading: observable,
+      error: observable,
+      load: action,
+    });
   }
-  protected didMount() { this.load(); }
+  protected didMount() {
+    this.load();
+  }
   load() {
     const request = ++this.request;
-    this.loading = true; this.error = '';
+    this.loading = true;
+    this.error = '';
     this.globals.app.api<ServerTorrent[]>('torrents', null, (error, items) => {
       if (request !== this.request || this.unmountSignal.aborted) return;
       runInAction(() => {
         this.loading = false;
         if (error) this.error = error.message;
         else this.items = items;
-        this.focusRevision++;
+        this.restoreFocus();
       });
     });
   }
-  protected willUnmount() { this.request++; }
+  protected willUnmount() {
+    this.request++;
+  }
 }

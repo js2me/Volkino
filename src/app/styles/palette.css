@@ -14,7 +14,7 @@
   --color-text-secondary: #c3c1cb;
   --color-text-muted: #a09dab;
   --color-ink: #21180d;
-  --color-focus-ring: rgba(244, 189, 104, .24);
+  --color-focus-ring: rgba(244, 189, 104, 0.24);
   --color-error: #ff9f9c;
   --color-warning: #f4bd68;
   --color-success: #88dbb5;

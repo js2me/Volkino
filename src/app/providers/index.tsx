@@ -1,4 +1,7 @@
-import { enableObservableTracking, ViewModelsProvider } from 'mobx-view-model-solid';
+import {
+  enableObservableTracking,
+  ViewModelsProvider,
+} from 'mobx-view-model-solid';
 import type { ParentProps } from 'solid-js';
 import { Globals } from '../../globals';
 import type { AppServices } from '../../shared/types/screens';
@@ -11,5 +14,9 @@ export function initializeApp(services: AppServices) {
 }
 
 export function AppProvider(props: ParentProps) {
-  return <ViewModelsProvider value={globals.stores.viewModels}>{props.children}</ViewModelsProvider>;
+  return (
+    <ViewModelsProvider value={globals.stores.viewModels}>
+      {props.children}
+    </ViewModelsProvider>
+  );
 }

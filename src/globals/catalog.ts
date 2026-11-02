@@ -36,11 +36,22 @@ export interface CatalogSession {
   scroll: number;
 }
 
-export const sortNames = { popular: 'Популярное', newest: 'Новее', rating: 'По рейтингу' };
+export const sortNames = {
+  popular: 'Популярное',
+  newest: 'Новее',
+  rating: 'По рейтингу',
+};
 
 export function createCatalogSession(): CatalogSession {
   return {
-    filters: { type: 'movie', genre: '', minRating: 0, year: '', sort: 'popular', page: 1 },
+    filters: {
+      type: 'movie',
+      genre: '',
+      minRating: 0,
+      year: '',
+      sort: 'popular',
+      page: 1,
+    },
     genres: { movie: [], tv: [] },
     data: null,
     selectedId: null,

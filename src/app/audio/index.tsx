@@ -8,10 +8,23 @@ const api = {
   attach: audioProcessor.attach.bind(audioProcessor),
   reset: audioProcessor.reset.bind(audioProcessor),
   mountSettings(target: HTMLElement, mode: AudioFixMode = 'off') {
-    return render(() => <AppProvider><AudioSettings payload={{ mode }} /></AppProvider>, target);
+    return render(
+      () => (
+        <AppProvider>
+          <AudioSettings payload={{ mode }} />
+        </AppProvider>
+      ),
+      target,
+    );
   },
 };
 
-declare global { interface Window { TWAudio: typeof api } }
+declare global {
+  interface Window {
+    TWAudio: typeof api;
+  }
+}
 
-export function installAudio() { window.TWAudio = api; }
+export function installAudio() {
+  window.TWAudio = api;
+}

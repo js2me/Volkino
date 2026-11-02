@@ -13,5 +13,7 @@ export class AudioSettingsVM extends VM<{ mode: AudioFixMode }> {
     makeObservable(this, { mode: observable, setMode: action });
   }
 
-  setMode(mode: AudioFixMode) { this.mode = mode; }
+  setMode(mode: AudioFixMode) {
+    this.mode = mode;
+  }
 }

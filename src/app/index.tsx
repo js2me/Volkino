@@ -9,9 +9,11 @@ import { Torrents } from '../screens/torrents/ui';
 import './styles/index.css';
 
 export function App() {
-  return <AppProvider>
-    <Catalog />
-  </AppProvider>;
+  return (
+    <AppProvider>
+      <Catalog />
+    </AppProvider>
+  );
 }
 
 export function mountCatalog(target: HTMLElement) {
@@ -19,31 +21,56 @@ export function mountCatalog(target: HTMLElement) {
 }
 
 export function mountLatest(target: HTMLElement) {
-  return render(() => <AppProvider>
-    <Latest />
-  </AppProvider>, target);
+  return render(
+    () => (
+      <AppProvider>
+        <Latest />
+      </AppProvider>
+    ),
+    target,
+  );
 }
 
 export function mountHome(target: HTMLElement) {
-  return render(() => <AppProvider>
-    <Home />
-  </AppProvider>, target);
+  return render(
+    () => (
+      <AppProvider>
+        <Home />
+      </AppProvider>
+    ),
+    target,
+  );
 }
 
 export function mountSearch(target: HTMLElement) {
-  return render(() => <AppProvider>
-    <Search />
-  </AppProvider>, target);
+  return render(
+    () => (
+      <AppProvider>
+        <Search />
+      </AppProvider>
+    ),
+    target,
+  );
 }
 
 export function mountHistory(target: HTMLElement) {
-  return render(() => <AppProvider>
-    <History />
-  </AppProvider>, target);
+  return render(
+    () => (
+      <AppProvider>
+        <History />
+      </AppProvider>
+    ),
+    target,
+  );
 }
 
 export function mountTorrents(target: HTMLElement) {
-  return render(() => <AppProvider>
-    <Torrents />
-  </AppProvider>, target);
+  return render(
+    () => (
+      <AppProvider>
+        <Torrents />
+      </AppProvider>
+    ),
+    target,
+  );
 }

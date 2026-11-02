@@ -5,13 +5,20 @@ import type { HistoryItem } from '../../../shared/types/screens';
 
 export class HistoryVM extends VM {
   items: HistoryItem[];
+  protected didMount() {
+    this.afterRender((root) =>
+      root.querySelector<HTMLButtonElement>('button')?.focus(),
+    );
+  }
+
   constructor(params: ViewModelParams) {
     super(params);
     this.items = this.globals.app.history();
     makeObservable(this, { items: observable.ref, clear: action });
   }
   clear() {
-    this.globals.app.clearHistory(); this.items = [];
+    this.globals.app.clearHistory();
+    this.items = [];
     document.querySelector<HTMLButtonElement>('[data-view="history"]')?.focus();
   }
 }

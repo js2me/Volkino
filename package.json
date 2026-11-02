@@ -7,7 +7,9 @@
     "start": "node server/index.js",
     "test": "node --test test/*.test.js",
     "build": "npm run build:ui && node scripts/package.mjs",
-    "check": "node --check server/index.js && node --check server/core.js && node --check server/filmix.js && node --check server/filmix-web.js && node --check server/local-torrserver.js && node --check app/app.js && tsc --noEmit",
+    "check": "node --check server/index.js && node --check server/core.js && node --check server/filmix.js && node --check server/filmix-web.js && node --check server/local-torrserver.js && node --check app/app.js && tsc --noEmit && npm run format:check",
+    "format": "biome format --write src",
+    "format:check": "biome format src",
     "prestart": "npm run build:ui",
     "build:ui": "vite build",
     "test:ui": "npm run build:ui && playwright test",
@@ -29,6 +31,7 @@
     "solid-js": "^1.9.18"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
     "@playwright/test": "^1.64.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",

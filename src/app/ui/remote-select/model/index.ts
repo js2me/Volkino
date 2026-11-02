@@ -17,32 +17,67 @@ export class RemoteSelectVM extends VM<RemoteSelectPayload> {
     super(params);
     const select = this.payload.select;
     this.options = Array.from(select.options).map((option, index) => ({
-      label: option.text, index, disabled: option.disabled,
+      label: option.text,
+      index,
+      disabled: option.disabled,
     }));
-    this.title = (select.id && document.querySelector<HTMLLabelElement>('label[for="' + select.id + '"]')?.textContent) ||
-      select.getAttribute('aria-label') || 'Выберите значение';
+    this.title =
+      (select.id &&
+        document.querySelector<HTMLLabelElement>(
+          'label[for="' + select.id + '"]',
+        )?.textContent) ||
+      select.getAttribute('aria-label') ||
+      'Выберите значение';
     this.activeIndex = select.selectedIndex;
-    if (!this.options[this.activeIndex] || this.options[this.activeIndex].disabled) {
-      this.activeIndex = this.options.find(option => !option.disabled)?.index ?? -1;
+    if (
+      !this.options[this.activeIndex] ||
+      this.options[this.activeIndex].disabled
+    ) {
+      this.activeIndex =
+        this.options.find((option) => !option.disabled)?.index ?? -1;
     }
-    makeObservable(this, { activeIndex: observable, move: action, edge: action });
+    makeObservable(this, {
+      activeIndex: observable,
+      move: action,
+      edge: action,
+    });
   }
 
   protected didMount() {
     this.payload.ready(this);
+    this.focusActive();
+  }
+
+  private focusActive() {
+    this.afterRender((root) => {
+      const option = root.querySelector<HTMLButtonElement>(
+        '[data-option-index="' + this.activeIndex + '"]',
+      );
+      option?.focus({ preventScroll: true });
+      option?.scrollIntoView({ block: 'nearest' });
+    });
   }
 
   move(direction: number) {
-    const enabled = this.options.filter(option => !option.disabled);
-    const current = enabled.findIndex(option => option.index === this.activeIndex);
-    const option = enabled[Math.max(0, Math.min(enabled.length - 1, current + direction))];
-    if (option) this.activeIndex = option.index;
+    const enabled = this.options.filter((option) => !option.disabled);
+    const current = enabled.findIndex(
+      (option) => option.index === this.activeIndex,
+    );
+    const option =
+      enabled[Math.max(0, Math.min(enabled.length - 1, current + direction))];
+    if (option) {
+      this.activeIndex = option.index;
+      this.focusActive();
+    }
   }
 
   edge(last: boolean) {
-    const enabled = this.options.filter(option => !option.disabled);
+    const enabled = this.options.filter((option) => !option.disabled);
     const option = enabled[last ? enabled.length - 1 : 0];
-    if (option) this.activeIndex = option.index;
+    if (option) {
+      this.activeIndex = option.index;
+      this.focusActive();
+    }
   }
 
   choose(index = this.activeIndex) {

@@ -3,10 +3,14 @@ import { render } from 'solid-js/web';
 
 /** Shared, persistent page heading for both Solid screens and the legacy shell. */
 export function ScreenHeader(props: { title: string; children?: JSX.Element }) {
-  return <header class="screen-header">
-    <h1 id="page-title">{props.title}</h1>
-    <div id="screen-header-tools" class="screen-header-tools">{props.children}</div>
-  </header>;
+  return (
+    <header class="screen-header">
+      <h1 id="page-title">{props.title}</h1>
+      <div id="screen-header-tools" class="screen-header-tools">
+        {props.children}
+      </div>
+    </header>
+  );
 }
 
 export function installScreenHeader() {

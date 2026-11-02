@@ -1,7 +1,11 @@
 import type { CatalogItem } from '../../globals/catalog';
 
 export interface ScreenAPI {
-  <T>(route: string, body: null, done: (error: Error | null, data: T) => void): void;
+  <T>(
+    route: string,
+    body: null,
+    done: (error: Error | null, data: T) => void,
+  ): void;
 }
 
 export interface HistoryItem {

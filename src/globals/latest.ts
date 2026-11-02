@@ -33,5 +33,10 @@ export interface LatestDetails {
   kpRating: string;
 }
 export function createLatestSession() {
-  return { page: 1, data: null as LatestPage | null, selectedId: null as string | null, scroll: 0 };
+  return {
+    page: 1,
+    data: null as LatestPage | null,
+    selectedId: null as string | null,
+    scroll: 0,
+  };
 }
