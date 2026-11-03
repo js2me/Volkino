@@ -102,7 +102,8 @@ export const Home = withViewModel(HomeVM, () => {
               )}
             </For>
             <p class="catalog-source">
-              Каталог: VilkaDB · подборки обновляются каждые 3 часа
+              Каталог: {data().source || 'VilkaDB'} · подборки обновляются
+              каждые 3 часа
               {data().stale
                 ? ' · показана сохранённая подборка'
                 : data().partial

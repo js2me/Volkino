@@ -111,6 +111,41 @@ test('Filmix playback uses the same audio processor', async ({ page }) => {
   await expect(page.locator('#player')).toBeHidden();
 });
 
+test('player menu changes audio fix for the current video and keeps playback state', async ({ page }) => {
+  const mode = await config(page);
+  await page.goto('/');
+  await play(page);
+  await page.keyboard.press('ArrowUp');
+  const button = page.locator('#player-audio-fix');
+  await expect(button).toHaveText('Автофикс звука: Выключен');
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(button).toHaveText('Автофикс звука: Умеренный');
+  await expect(page.locator('#audio-mode-status')).toHaveText('Автофикс звука: Умеренный');
+  await expect.poll(() => page.locator('#video').evaluate(video => video.currentTime)).toBeGreaterThan(.5);
+  await page.locator('#video').evaluate(video => video.pause());
+  const position = await page.locator('#video').evaluate(video => video.currentTime);
+  await page.keyboard.press('Enter');
+  await expect(button).toHaveText('Автофикс звука: Ночной');
+  await expect(page.locator('#audio-mode-status')).toHaveText('Автофикс звука: Ночной');
+  await expect.poll(() => page.locator('#video').evaluate(video => video.readyState)).toBeGreaterThan(0);
+  expect(await page.locator('#video').evaluate(video => video.paused)).toBe(true);
+  expect(await page.locator('#video').evaluate(video => video.currentTime)).toBeCloseTo(position, 1);
+  await page.keyboard.press('Enter');
+  await expect(button).toHaveText('Автофикс звука: Выключен');
+  await expect.poll(() => page.locator('#video').evaluate(video => video.readyState)).toBeGreaterThan(0);
+  expect(await page.locator('#video').evaluate(video => video.paused)).toBe(true);
+  expect(await page.locator('#video').evaluate(video => video.currentTime)).toBeCloseTo(position, 1);
+  expect(mode()).toBe('off');
+  await page.keyboard.press('Enter');
+  await expect(button).toHaveText('Автофикс звука: Умеренный');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('ArrowDown');
+  await page.locator('.episode-card').nth(1).click();
+  await page.keyboard.press('ArrowUp');
+  await expect(button).toHaveText('Автофикс звука: Выключен');
+});
+
 for (const failure of ['source', 'silent', 'resume', 'analyser', 'unavailable']) {
   test(`audio ${failure} falls back to native playback instead of leaving a silent Web Audio element`, async ({ page }) => {
     const errors = [];
@@ -142,6 +177,11 @@ for (const failure of ['source', 'silent', 'resume', 'analyser', 'unavailable'])
     await page.evaluate(() => { window.originalVideo = document.getElementById('video'); });
     await play(page);
     await expect(page.locator('#audio-mode-status')).toContainText('Оригинальный звук');
+    if (failure === 'unavailable') {
+      await page.keyboard.press('ArrowUp');
+      await expect(page.locator('#player-audio-fix')).toBeDisabled();
+      await page.keyboard.press('Escape');
+    }
     if (['source', 'silent', 'analyser'].includes(failure)) expect(await page.evaluate(() => document.getElementById('video') !== window.originalVideo)).toBe(true);
     await expect.poll(() => page.locator('#video').evaluate(video => video.currentTime)).toBeGreaterThan(.5);
     await page.keyboard.press('Escape');

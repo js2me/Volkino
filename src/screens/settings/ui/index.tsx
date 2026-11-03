@@ -109,6 +109,31 @@ export const Settings = withViewModel(SettingsVM, ({ model }) => {
           )}
         </div>
       </div>
+      <Field id="catalog-provider" label="Источник подборок на главной">
+        <select
+          id="catalog-provider"
+          class="input"
+          value={model.draft.catalogProvider || 'vilkadb'}
+          onChange={(event) =>
+            model.set('catalogProvider', event.currentTarget.value)
+          }
+        >
+          <option value="vilkadb">VilkaDB</option>
+          <option value="cub">CUB / Lampa</option>
+          <option value="filmix">Filmix</option>
+          <option value="cinemeta">Cinemeta</option>
+          <option value="yts">YTS</option>
+        </select>
+      </Field>
+      <p class="muted">
+        {model.draft.catalogProvider === 'filmix'
+          ? 'Filmix показывает последние добавления и обновления, в том числе старые фильмы и сериалы.'
+          : model.draft.catalogProvider === 'cinemeta'
+            ? 'Названия Cinemeta могут быть на английском языке.'
+            : model.draft.catalogProvider === 'yts'
+              ? 'YTS содержит только фильмы; названия могут быть на английском языке.'
+              : 'Выбор влияет на подборки главной и не меняет источник поиска раздач.'}
+      </p>
       <Field id="search-provider" label="Источник поиска">
         <select
           id="search-provider"

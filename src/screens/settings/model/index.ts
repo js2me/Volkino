@@ -81,6 +81,8 @@ export class SettingsVM extends VM {
   }
   save(after?: () => void) {
     const step = Number(this.draft.seekStep);
+    const previousCatalogProvider =
+      this.globals.config.catalogProvider || 'vilkadb';
     if (!Number.isInteger(step) || step < 1 || step > 3600) {
       this.globals.toast(
         'Шаг перемотки должен быть целым числом от 1 до 3600 секунд',
@@ -100,6 +102,7 @@ export class SettingsVM extends VM {
       torrserverUrl: this.draft.torrserverUrl,
       torrserverUsername: this.draft.torrserverUsername,
       searchProvider: this.draft.searchProvider,
+      catalogProvider: this.draft.catalogProvider || 'vilkadb',
       jacredUrl: this.draft.jacredUrl,
     };
     if (this.draft.filmixToken) data.filmixToken = this.draft.filmixToken;
@@ -108,6 +111,11 @@ export class SettingsVM extends VM {
     if (!data.torrserverUsername) data.torrserverPassword = '';
     if (this.draft.jacredApiKey) data.jacredApiKey = this.draft.jacredApiKey;
     this.update(data, () => {
+      if (
+        (this.globals.config.catalogProvider || 'vilkadb') !==
+        previousCatalogProvider
+      )
+        this.globals.state.homeData = null;
       this.globals.toast('Настройки сохранены');
       this.globals.health();
       after?.();

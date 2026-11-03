@@ -54,9 +54,19 @@ export class DetailsVM extends VM {
   protected didMount() {
     if (this.globals.detailsNeedsLoad && this.item) {
       this.globals.detailsNeedsLoad = false;
-      this.loading = true;
       const item = this.item;
       this.runSearch();
+      if (
+        item.provider &&
+        item.provider !== 'filmix' &&
+        item.provider !== 'vilkadb'
+      ) {
+        this.afterRender((root) =>
+          root.querySelector<HTMLButtonElement>('button')?.focus(),
+        );
+        return;
+      }
+      this.loading = true;
       this.globals.api<Details>(
         'catalog/item?key=' + encodeURIComponent(item.id),
         null,
@@ -65,7 +75,12 @@ export class DetailsVM extends VM {
           runInAction(() => {
             this.loading = false;
             if (error) return;
-            this.item = { ...data, poster: data.poster || item.poster };
+            this.item = {
+              ...item,
+              ...data,
+              type: data.type || item.type,
+              poster: data.poster || item.poster,
+            };
             this.globals.detailItem = this.item;
             const query = data.searchTitle || data.title;
             if (query !== this.globals.state.query) {

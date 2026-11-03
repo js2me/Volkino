@@ -15,6 +15,9 @@ export interface CatalogItem {
   rating?: string;
   poster?: string;
   searchTitle?: string;
+  provider?: string;
+  metadata?: string;
+  description?: string;
 }
 
 export type Genres = Record<Filters['type'], { id: string; name: string }[]>;

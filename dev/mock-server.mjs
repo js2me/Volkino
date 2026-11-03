@@ -44,7 +44,7 @@ async function streamVideo(req, res) {
 export function createMockMiddleware() {
   let config = {
     seekStep: 30, audioFix: 'off', torrserverMode: 'external', torrserverUrl: 'http://mock-torrserver:8090', torrserverUsername: '',
-    searchProvider: 'vilkadb', jacredUrl: '', hasPassword: false, hasApiKey: false, hasFilmixToken: false,
+    searchProvider: 'vilkadb', catalogProvider: 'vilkadb', jacredUrl: '', hasPassword: false, hasApiKey: false, hasFilmixToken: false,
     filmixApiUrl: 'http://mock-filmix/api/v2', filmixSiteUrl: 'http://mock-filmix',
   };
   let localState = 'stopped';
@@ -73,6 +73,7 @@ export function createMockMiddleware() {
         case '/api/config': {
           if (body.seekStep !== undefined && (!Number.isInteger(body.seekStep) || body.seekStep < 1 || body.seekStep > 3600)) return json(res, { error: 'Шаг перемотки должен быть целым числом от 1 до 3600 секунд' }, 400);
           if (body.audioFix !== undefined && !['off', 'moderate', 'night'].includes(body.audioFix)) return json(res, { error: 'Неизвестный режим автофикса звука' }, 400);
+          if (body.catalogProvider !== undefined && !['vilkadb', 'cub', 'filmix', 'cinemeta', 'yts'].includes(body.catalogProvider)) return json(res, { error: 'Неизвестный источник подборок' }, 400);
           if (req.method === 'POST') {
             const { filmixToken, torrserverPassword, jacredApiKey, ...settings } = body;
             config = { ...config, ...settings, ...(filmixToken ? { hasFilmixToken: true } : {}), ...(torrserverPassword ? { hasPassword: true } : {}), ...(jacredApiKey ? { hasApiKey: true } : {}) };
@@ -89,8 +90,8 @@ export function createMockMiddleware() {
           sections: empty ? [] : [
             { id: 'popular', title: 'Популярное сейчас', items: items.filter(item => item.type === 'movie').slice(0, 12) },
             { id: 'movies', title: 'Новые фильмы', items: items.filter(item => item.type === 'movie').slice(12, 24) },
-            { id: 'series', title: 'Сериалы', items: items.filter(item => item.type === 'tv').slice(0, 12) },
-          ], updatedAt: Date.now(), source: 'Локальные моки',
+            ...(config.catalogProvider === 'yts' ? [] : [{ id: 'series', title: 'Сериалы', items: items.filter(item => item.type === 'tv').slice(0, 12) }]),
+          ], updatedAt: Date.now(), source: { vilkadb: 'VilkaDB', cub: 'CUB', filmix: 'Filmix', cinemeta: 'Cinemeta', yts: 'YTS' }[config.catalogProvider],
         });
         case '/api/catalog/browse': return json(res, browse(url.searchParams, empty));
         case '/api/catalog/item': {

@@ -86,3 +86,24 @@ test('mock scenarios show empty, failed and loading states without editing code'
   await expect(page.locator('#catalog-results')).toContainText('Загружаем каталог…');
   await expect(page.locator('#catalog-results .poster-card')).toHaveCount(36);
 });
+
+test('changing the home source saves it and reloads cached selections', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.home-section')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  const searchProvider = await page.locator('#search-provider').inputValue();
+  await page.locator('#catalog-provider').selectOption('yts');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.locator('#toast')).toHaveText('Настройки сохранены');
+  await expect(page.locator('#search-provider')).toHaveValue(searchProvider);
+  await page.getByRole('button', { name: 'Главная', exact: true }).click();
+  await expect(page.locator('.home-section')).toHaveCount(2);
+  await expect(page.locator('.catalog-source')).toContainText('YTS');
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await expect(page.locator('#catalog-provider')).toHaveValue('yts');
+  await page.locator('#catalog-provider').selectOption('vilkadb');
+  const saved = page.waitForResponse(response => response.url().endsWith('/api/config') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  expect((await (await saved).json()).catalogProvider).toBe('vilkadb');
+  await expect(page.locator('#toast')).toHaveText('Настройки сохранены');
+});

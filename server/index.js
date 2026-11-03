@@ -1,12 +1,12 @@
 'use strict';
 // Node 8.12-compatible; no runtime dependencies. The TV runs this helper locally.
 var http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), URL = require('url'), crypto = require('crypto');
-var core = require('./core'),catalogModule=require('./catalog'),filmixModule=require('./filmix');
+var core = require('./core'),catalogModule=require('./catalog'),filmixModule=require('./filmix'),catalogHttp=require('./catalog-http'),providerModule=require('./catalog-providers'),catalogFilmix=require('./catalog-filmix');
 var PORT = Number(process.env.PORT || 32190), HOST = process.env.HOST || '127.0.0.1';
 var APP = path.resolve(__dirname, '../app');
 if (!fs.existsSync(path.join(APP, 'index.html'))) APP = path.resolve(__dirname, '..');
 var CONFIG = process.env.TW_CONFIG || path.resolve(__dirname, '../config.json');
-var defaults = { seekStep: 30, audioFix: 'off', torrserverMode: 'local', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
+var defaults = { seekStep: 30, audioFix: 'off', torrserverMode: 'local', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', catalogProvider:'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
 Object.assign(defaults,{filmixTransport:'mobile',filmixWebHash:'',filmixWebAccessToken:'',filmixWebRefreshToken:'',filmixWebUserAgent:''});
 var config=Object.assign({},defaults);
 var savedConfig = {};
@@ -15,6 +15,7 @@ try { savedConfig = JSON.parse(fs.readFileSync(CONFIG, 'utf8')) || {}; config = 
 if (!Object.prototype.hasOwnProperty.call(savedConfig, 'torrserverMode') && (savedConfig.torrserverUrl || process.env.TORRSERVER_URL)) config.torrserverMode = 'external';
 if (!validSeekStep(config.seekStep)) config.seekStep=30;
 if (['off','moderate','night'].indexOf(config.audioFix)<0) config.audioFix='off';
+if (['vilkadb','cub','filmix','cinemeta','yts'].indexOf(config.catalogProvider)<0) config.catalogProvider='vilkadb';
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
 var localTS = require('./local-torrserver').create({directory: path.dirname(CONFIG), port: process.env.TW_TORRSERVER_PORT});
 function tsBase() { return config.torrserverMode === 'local' ? localTS.base : config.torrserverUrl; }
@@ -22,6 +23,7 @@ function tsAuth() { return config.torrserverMode === 'local' ? null : {username:
 var token = crypto.randomBytes(24).toString('hex');
 var catalog=catalogModule.create({cacheFile:path.join(path.dirname(CONFIG),'catalog-cache.json'),fetchPage:function(endpoint){return request(catalogModule.origin,endpoint,null,null,14000).then(JSON.parse);}});
 var filmix=filmixModule.create({getConfig:function(){return config;},saveConfig:saveConfig});
+var providers=providerModule.create({fetchJSON:catalogHttp.json});
 var imageCache={},imageBytes=0;
 function request(base, endpoint, data, auth, timeout) {
   return new Promise(function (resolve, reject) {
@@ -60,7 +62,7 @@ function validateConfig(data) {
     if (!validSeekStep(data.seekStep)) throw new Error('Шаг перемотки должен быть целым числом от 1 до 3600 секунд');
     next.seekStep = data.seekStep;
   }
-  ['audioFix','torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','jacredUrl','jacredApiKey','filmixApiUrl','filmixSiteUrl','filmixToken','filmixDeviceId'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  ['audioFix','torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','catalogProvider','jacredUrl','jacredApiKey','filmixApiUrl','filmixSiteUrl','filmixToken','filmixDeviceId'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
   ['filmixTransport','filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken','filmixWebUserAgent'].forEach(function(key){if(typeof data[key]==='string')next[key]=data[key].trim();});
   if(['web','mobile'].indexOf(next.filmixTransport)<0)throw new Error('Неизвестный способ подключения Filmix');
   ['filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken','filmixWebUserAgent'].forEach(function(key){if(next[key].length>16384||/[\r\n]/.test(next[key]))throw new Error('Некорректная сессия Filmix TV');});
@@ -70,12 +72,15 @@ function validateConfig(data) {
   next.filmixApiUrl=core.validBase(next.filmixApiUrl||filmixModule.defaultApi); next.filmixSiteUrl=core.validBase(next.filmixSiteUrl||filmixModule.defaultSite);
   if(next.filmixToken.length>512||next.filmixDeviceId&&!/^[a-f0-9]{16}$/.test(next.filmixDeviceId))throw new Error('Некорректные настройки Filmix');
   if (['vilkadb','torrserver','torznab','jacred'].indexOf(next.searchProvider) < 0) throw new Error('Неизвестный источник поиска');
+  if ((data.catalogProvider!==undefined&&typeof data.catalogProvider!=='string')||['vilkadb','cub','filmix','cinemeta','yts'].indexOf(next.catalogProvider)<0) throw new Error('Неизвестный источник подборок');
   return next;
 }
 function saveConfig(data) {
   var next = validateConfig(data);
+  var clearFilmix = next.filmixApiUrl!==config.filmixApiUrl || next.filmixToken!==config.filmixToken || next.filmixTransport!==config.filmixTransport || next.filmixWebAccessToken!==config.filmixWebAccessToken;
   // Credentials stay in the helper config, outside the app's browser storage.
   fs.writeFileSync(CONFIG + '.tmp', JSON.stringify(next, null, 2), { mode: 384 }); fs.renameSync(CONFIG + '.tmp', CONFIG); config = next;
+  if(clearFilmix && catalog)catalog.clearHome('filmix');
 }
 function search(query) {
   query = query.trim(); if (query.length < 2 || query.length > 160) throw new Error('Введите от 2 до 160 символов');
@@ -161,8 +166,9 @@ var server = http.createServer(function (req, res) {
     if (route.indexOf('/filmix-stream/')===0 && ['GET','HEAD'].indexOf(req.method)>=0) { filmix.stream(req,res,route.slice('/filmix-stream/'.length)); return null; }
     if (route === '/api/health' && req.method === 'GET') return ts('/echo', null, 6000).then(function (v) { return { ok: true, version: v.trim(), url: tsBase() }; });
     if (route === '/api/catalog/browse' && req.method === 'GET') return catalog.browse(q);
-    if (route === '/api/catalog/home' && req.method === 'GET') return catalog.home();
-    if (route === '/api/catalog/item' && req.method === 'GET') return catalog.item(String(q.key||''));
+    if (route === '/api/catalog/home' && req.method === 'GET') {var provider=config.catalogProvider;return provider==='vilkadb'?catalog.home():catalog.externalHome(provider,function(){return provider==='filmix'?catalogFilmix.home(filmix):providers.home(provider);});}
+    if (route === '/api/catalog/item' && req.method === 'GET') {var key=String(q.key||'');return /^filmix:/.test(key)?catalogFilmix.details(filmix,key):catalog.item(key);}
+    if (route === '/catalog-poster' && (req.method === 'GET'||req.method === 'HEAD')) return catalogHttp.poster(req,res,String(q.url||''));
     if (route === '/poster' && (req.method === 'GET'||req.method === 'HEAD')) {sendPoster(req,res,String(q.path||''));return null;}
     if (route === '/api/search' && req.method === 'GET') return search(String(q.q || ''));
     if (route === '/api/enable-search' && req.method === 'POST') return tsJSON('/settings', { action: 'get' }).then(function (s) { if (s.EnableRutorSearch) return { ok: true }; s.EnableRutorSearch = true; return ts('/settings', { action: 'set', sets: s }).then(function () { return { ok: true, message: 'Поиск включён. Первая загрузка индекса может занять несколько минут.' }; }); });

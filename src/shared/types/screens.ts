@@ -27,6 +27,7 @@ export interface HistoryItem {
 
 export interface HomeData {
   sections: { id: string; title: string; items: CatalogItem[] }[];
+  source?: string;
   updatedAt: number;
   stale?: boolean;
   partial?: boolean;

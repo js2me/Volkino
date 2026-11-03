@@ -4,6 +4,7 @@ import { VM } from '../../shared/lib/mobx';
 import { create, pointerTime } from '../services/seek';
 import type { MediaFile, NativePlayback } from '../services/types';
 import { audioProcessor } from '../audio/processor';
+import { audioFixNames, type AudioFixMode } from '../audio/graph';
 
 interface AudioTrack {
   enabled: boolean;
@@ -40,6 +41,7 @@ export class PlayerVM extends VM {
   fitIndex = 0;
   audioLabel = '';
   audioDisabled = true;
+  audioFixMode: AudioFixMode = 'off';
   resume = 0;
   private returnFocus: HTMLElement | null = null;
   private seekControl!: ReturnType<typeof create>;
@@ -65,14 +67,12 @@ export class PlayerVM extends VM {
   get title() {
     return this.playing?.file.path.split('/').pop() || '';
   }
-  get fit() {
-    return ['contain', 'cover', 'fill'][this.fitIndex];
-  }
   get fitLabel() {
     return [
       'Исходные пропорции',
       'Заполнить с обрезкой',
       'Растянуть на весь экран',
+      'Увеличить на 33%',
     ][this.fitIndex];
   }
   constructor(params: ViewModelParams) {
@@ -97,6 +97,7 @@ export class PlayerVM extends VM {
       fitIndex: observable,
       audioLabel: observable,
       audioDisabled: observable,
+      audioFixMode: observable,
       play: action.bound,
       stop: action.bound,
       toggle: action.bound,
@@ -109,6 +110,7 @@ export class PlayerVM extends VM {
       selectEpisode: action.bound,
       cycleFit: action.bound,
       audioTrack: action.bound,
+      cycleAudioFix: action.bound,
       onMedia: action.bound,
       onPointer: action.bound,
       onVideoClick: action.bound,
@@ -138,6 +140,7 @@ export class PlayerVM extends VM {
         if (document.hidden) this.pauseAndSave();
       });
       this.listen(window, 'beforeunload', () => this.saveHistory());
+      this.listen(window, 'resize', () => this.applyFit());
       window.TWAndroidKey = (code, down, repeat) => {
         if (code === 13 && document.activeElement?.tagName === 'INPUT')
           return false;
@@ -209,6 +212,7 @@ export class PlayerVM extends VM {
     for (const type of [
       'seeked',
       'loadedmetadata',
+      'resize',
       'playing',
       'waiting',
       'canplay',
@@ -247,6 +251,7 @@ export class PlayerVM extends VM {
         : 'Буферизация · получаем данные от TorrServer…';
     this.backVisible = true;
     this.audioStatus = '';
+    this.audioFixMode = this.globals.config.audioFix || 'off';
     this.renderPosition(resume);
     this.showOverlay();
     this.saveHistory(true);
@@ -254,16 +259,7 @@ export class PlayerVM extends VM {
       root.querySelector<HTMLElement>('#player-back')?.focus(),
     );
     const current = this.playing;
-    if (!window.TWNativePlayer)
-      audioProcessor.attach(
-        this.video,
-        this.globals.config.audioFix || 'off',
-        action((active, message) => {
-          if (this.playing !== current) return;
-          if (active) this.audioStatus = message;
-          else this.recoverAudio(current, message);
-        }),
-      );
+    if (!window.TWNativePlayer) this.attachAudio(current);
     if (this.globals.source !== 'filmix')
       this.globals.api(
         'preload',
@@ -450,6 +446,7 @@ export class PlayerVM extends VM {
       paused = this.video.paused;
     this.resetAudio();
     this.resume = position || 0;
+    this.audioFixMode = 'off';
     this.audioStatus = 'Оригинальный звук · автофикс недоступен';
     this.globals.toast(message + '. Продолжаем с оригинальным звуком.');
     if (url) {
@@ -463,6 +460,50 @@ export class PlayerVM extends VM {
           }
         });
     }
+  }
+  private attachAudio(current: Playback) {
+    audioProcessor.attach(
+      this.video,
+      this.audioFixMode,
+      action((active, message) => {
+        if (this.playing !== current) return;
+        if (active) this.audioStatus = message;
+        else this.recoverAudio(current, message);
+      }),
+    );
+  }
+  get audioFixLabel() {
+    return audioFixNames[this.audioFixMode];
+  }
+  get audioFixSupported() {
+    return audioProcessor.supported && !window.TWNativePlayer;
+  }
+  cycleAudioFix() {
+    const current = this.playing;
+    if (!current || !this.audioFixSupported) return;
+    const modes: AudioFixMode[] = ['off', 'moderate', 'night'];
+    const next = modes[(modes.indexOf(this.audioFixMode) + 1) % modes.length];
+    const url = this.video.currentSrc || this.video.getAttribute('src');
+    const position = this.video.currentTime || this.resume;
+    const paused = this.video.paused;
+    const previous = this.video;
+    this.resetAudio();
+    const replaced = previous !== this.video;
+    this.audioFixMode = next;
+    this.audioStatus = '';
+    if (replaced && url) {
+      this.resume = position || 0;
+      this.video.src = url;
+      this.video.load();
+    }
+    this.attachAudio(current);
+    if (replaced && url && !paused)
+      this.video.play()?.catch(() => {
+        if (this.playing === current) {
+          this.status = 'Нажмите OK, чтобы продолжить';
+          this.showOverlay();
+        }
+      });
   }
   stop() {
     this.cancelDrag();
@@ -642,8 +683,30 @@ export class PlayerVM extends VM {
     this.showOverlay();
   }
   cycleFit() {
-    this.fitIndex = (this.fitIndex + 1) % 3;
+    this.fitIndex = (this.fitIndex + 1) % 4;
     this.updateOptions();
+  }
+  private applyFit() {
+    if (!this.video) return;
+    const width = this.root?.clientWidth || 0;
+    const height = this.root?.clientHeight || 0;
+    const videoWidth = this.video.videoWidth;
+    const videoHeight = this.video.videoHeight;
+    let x = 1;
+    let y = 1;
+    if (width && height && videoWidth && videoHeight) {
+      // The native video plane keeps its aspect ratio even when object-fit is ignored.
+      const ratio = videoWidth / videoHeight / (width / height);
+      const fillX = Math.max(1, 1 / ratio);
+      const fillY = Math.max(1, ratio);
+      if (this.fitIndex === 1) x = y = Math.max(fillX, fillY);
+      if (this.fitIndex === 2) {
+        x = fillX;
+        y = fillY;
+      }
+    }
+    if (this.fitIndex === 3) x = y = 1.33;
+    this.video.style.transform = `scale(${x}, ${y})`;
   }
   updateOptions() {
     const tracks = this.video?.audioTracks;
@@ -662,7 +725,7 @@ export class PlayerVM extends VM {
               'Дорожка ' + (index + 1)
             : 'выбрать') +
           ' · OK — следующая';
-    if (this.video) this.video.style.objectFit = this.fit;
+    this.applyFit();
     if (
       this.optionsOpen &&
       this.audioDisabled &&
@@ -716,6 +779,7 @@ export class PlayerVM extends VM {
   }
   onMedia(type: string) {
     const video = this.video;
+    if (type === 'resize') this.applyFit();
     if (type === 'seeked') this.seekControl.update();
     if (type === 'loadedmetadata') {
       this.updateOptions();
@@ -723,7 +787,7 @@ export class PlayerVM extends VM {
         try {
           video.currentTime = Math.min(
             this.resume,
-            Math.max(0, video.duration - 5),
+            Math.max(0, video.duration - 0.1),
           );
         } catch {}
         this.resume = 0;

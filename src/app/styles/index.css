@@ -436,6 +436,7 @@ kbd {
   left: 0;
   background: #000;
   z-index: 10;
+  overflow: hidden;
 }
 video {
   width: 100%;

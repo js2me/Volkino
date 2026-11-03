@@ -250,7 +250,7 @@ const Application = withViewModel(AppVM, ({ model }) => {
               />
               <span id="connection-text">{globals.connection}</span>
             </div>
-            <div class="version">webOS · v0.7.6</div>
+            <div class="version">webOS · v0.8.0</div>
           </div>
         </aside>
         <main id="main">

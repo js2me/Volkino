@@ -37,6 +37,14 @@ export const Player = withViewModel(PlayerVM, ({ model }) => (
           >
             {model.audioLabel}
           </button>
+          <button
+            id="player-audio-fix"
+            class="btn"
+            disabled={!model.audioFixSupported}
+            onClick={model.cycleAudioFix}
+          >
+            Автофикс звука: {model.audioFixLabel}
+          </button>
           <button id="player-fit" class="btn" onClick={model.cycleFit}>
             Изображение: {model.fitLabel}
           </button>

@@ -57,3 +57,15 @@ test('year and sort have separate cache identities, including after a restart',a
  api=catalog.create({fetchPage,cacheFile:file});const d=await api.browse({year:2026,sort:'rating'});assert.equal(calls,3);assert.equal(d.filters.year,'2026');assert.equal(d.filters.sort,'rating');
  }finally{fs.rmSync(dir,{recursive:true});}
 });
+
+test('home caches external sources separately and restores stale results for the selected source',async()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tw-providers-')),file=path.join(dir,'cache.json');let clock=Date.UTC(2026,9,25),calls=0;
+ try{const api=catalog.create({fetchPage:async()=>({channels:[]}),cacheFile:file,now:()=>clock});
+  const load=name=>async()=>{calls++;return {source:name,sections:[{id:'popular',items:[]}],updatedAt:clock};};
+  assert.equal((await api.externalHome('cub',load('CUB'))).source,'CUB');assert.equal((await api.externalHome('yts',load('YTS'))).source,'YTS');
+  assert.equal((await api.externalHome('cub',load('bad'))).source,'CUB');assert.equal(calls,2);
+  clock+=4*3600000;const restored=catalog.create({fetchPage:async()=>({channels:[]}),cacheFile:file,now:()=>clock});
+  const stale=await restored.externalHome('cub',async()=>{throw Error('offline');});assert.equal(stale.source,'CUB');assert.equal(stale.stale,true);
+  assert.throws(()=>restored.externalHome('unknown',load('bad')));
+ }finally{fs.rmSync(dir,{recursive:true});}
+});

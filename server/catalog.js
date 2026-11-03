@@ -41,13 +41,15 @@ function browsePage(data,f){
 }
 function create(options){
   var fetchPage=options.fetchPage,now=options.now||Date.now,file=options.cacheFile,cache={},pending={};
-  if(file)try{var saved=JSON.parse(fs.readFileSync(file,'utf8'));Object.keys(saved).slice(-32).forEach(function(k){if(k==='home'||/^browse:(movie|tv):[0-9]*:[0-9]:[0-9]*:(popular|newest|rating):[0-9]+$/.test(k)||/^(tmdb:(movie|tv):\d+|imdb:tt\d+)$/.test(k))cache[k]=saved[k];});}catch(_){}
+  if(file)try{var saved=JSON.parse(fs.readFileSync(file,'utf8'));Object.keys(saved).slice(-32).forEach(function(k){if(k==='home'||/^home:(cub|filmix|cinemeta|yts)$/.test(k)||/^browse:(movie|tv):[0-9]*:[0-9]:[0-9]*:(popular|newest|rating):[0-9]+$/.test(k)||/^(tmdb:(movie|tv):\d+|imdb:tt\d+)$/.test(k))cache[k]=saved[k];});}catch(_){}
   function save(){var keys=Object.keys(cache).sort(function(a,b){return cache[b].at-cache[a].at;});keys.slice(32).forEach(function(k){delete cache[k];});if(file)try{fs.writeFileSync(file+'.tmp',JSON.stringify(cache),{mode:384});fs.renameSync(file+'.tmp',file);}catch(_){} }
   function cached(key,ttl,loader){var old=cache[key];if(old&&old.data&&now()-old.at<ttl)return Promise.resolve(Object.assign({},old.data,{cached:true}));if(pending[key])return pending[key];pending[key]=Promise.resolve().then(loader).then(function(data){cache[key]={at:now(),data:data};save();return data;},function(err){if(old&&old.data)return Object.assign({},old.data,{cached:true,stale:true});throw err;}).then(function(data){delete pending[key];return data;},function(e){delete pending[key];throw e;});return pending[key];}
   function home(){return cached('home',3*60*60*1000,function(){var year=new Date(now()).getUTCFullYear(),warnings=[];function get(p){return fetchPage(p).catch(function(){warnings.push(p);return{channels:[]};});}
     return Promise.all([get('/VilkaDB/'),get('/VilkaDB/?type=movie&year='+year),get('/VilkaDB/?type=tv&year='+year)]).then(function(pages){var sections=[{id:'popular',title:'Популярное сейчас',items:popular(pages[0])},{id:'movies',title:'Новые фильмы · '+year,items:cards(pages[1])},{id:'series',title:'Новые сериалы · '+year,items:cards(pages[2])}].filter(function(s){return s.items.length;});if(!sections.length)throw new Error('Каталог временно недоступен. Поиск торрентов работает отдельно.');return{sections:sections,updatedAt:now(),partial:warnings.length>0,source:'VilkaDB'};});});}
   function item(key){var url=endpoint(key);return cached(key,24*60*60*1000,function(){return fetchPage(url).then(function(page){return details(page,key);});});}
   function browse(query){var f=browseFilters(query),key='browse:'+f.type+':'+f.genre+':'+f.minRating+':'+f.year+':'+f.sort+':'+f.page;return cached(key,60*60*1000,function(){return fetchPage(browseEndpoint(f)).then(function(page){var result=browsePage(page,f);result.updatedAt=now();return result;});});}
-  return{home:home,item:item,browse:browse};
+  function externalHome(provider,loader){if(['cub','filmix','cinemeta','yts'].indexOf(provider)<0)throw new Error('Неизвестный источник подборок');return cached('home:'+provider,3*60*60*1000,loader);}
+  function clearHome(provider){delete cache['home:'+provider];save();}
+  return{home:home,externalHome:externalHome,clearHome:clearHome,item:item,browse:browse};
 }
 module.exports={origin:ORIGIN,text:text,itemKey:itemKey,endpoint:endpoint,posterPath:posterPath,cards:cards,popular:popular,details:details,genreOptions:genreOptions,browseFilters:browseFilters,browseEndpoint:browseEndpoint,browsePage:browsePage,create:create};

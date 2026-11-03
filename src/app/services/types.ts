@@ -21,6 +21,7 @@ export interface Config {
   torrserverUsername?: string;
   hasPassword?: boolean;
   searchProvider?: string;
+  catalogProvider?: string;
   jacredUrl?: string;
   hasApiKey?: boolean;
   filmixTransport?: string;
