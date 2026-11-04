@@ -12,7 +12,9 @@ function allowedPoster(u){
 function get(address,validate,maxSize,redirects){
   return new Promise(function(resolve,reject){
     var u=URL.parse(address);if(!validate(u))return reject(new Error('Недопустимый адрес источника'));
-    var req=https.get(address,{headers:{Accept:'application/json, image/jpeg, image/png, image/webp','User-Agent':'VolKino/1.0'}},function(res){
+    // Node 8 on webOS supports get(options, callback), not get(url, options, callback).
+    u.headers={Accept:'application/json, image/jpeg, image/png, image/webp','User-Agent':'VolKino/1.0'};
+    var req=https.get(u,function(res){
       if(res.statusCode>=300&&res.statusCode<400&&res.headers.location){res.resume();if(!redirects)return reject(new Error('Слишком много перенаправлений'));return resolve(get(URL.resolve(address,res.headers.location),validate,maxSize,redirects-1));}
       if(res.statusCode!==200){res.resume();return reject(new Error('Источник ответил HTTP '+res.statusCode));}
       var parts=[],size=0,failed=false;
