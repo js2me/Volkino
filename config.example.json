@@ -5,6 +5,7 @@
   "torrserverPassword": "",
   "searchProvider": "vilkadb",
   "catalogProvider": "vilkadb",
+  "catalogBrowseProvider": "filmix",
   "jacredUrl": "",
   "jacredApiKey": "",
   "filmixTransport": "mobile",

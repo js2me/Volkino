@@ -24,6 +24,8 @@ var token = crypto.randomBytes(24).toString('hex');
 var catalog=catalogModule.create({cacheFile:path.join(path.dirname(CONFIG),'catalog-cache.json'),fetchPage:function(endpoint){return request(catalogModule.origin,endpoint,null,null,14000).then(JSON.parse);}});
 var filmix=filmixModule.create({getConfig:function(){return config;},saveConfig:saveConfig});
 var providers=providerModule.create({fetchJSON:catalogHttp.json});
+var catalogBrowse=require('./catalog-browse').create({vilkadb:catalog,filmix:filmix,fetchJSON:catalogHttp.json,identity:function(provider){return provider==='filmix'?(config.filmixApiUrl||'')+'|'+(config.filmixToken||''):'';}});
+if(!catalogBrowse.sources().some(function(source){return source.id===config.catalogBrowseProvider;}))config.catalogBrowseProvider='filmix';
 var imageCache={},imageBytes=0;
 function request(base, endpoint, data, auth, timeout) {
   return new Promise(function (resolve, reject) {
@@ -62,7 +64,8 @@ function validateConfig(data) {
     if (!validSeekStep(data.seekStep)) throw new Error('Шаг перемотки должен быть целым числом от 1 до 3600 секунд');
     next.seekStep = data.seekStep;
   }
-  ['audioFix','torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','catalogProvider','jacredUrl','jacredApiKey','filmixApiUrl','filmixSiteUrl','filmixToken','filmixDeviceId'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  ['audioFix','torrserverMode','torrserverUrl','torrserverUsername','torrserverPassword','searchProvider','catalogProvider','catalogBrowseProvider','jacredUrl','jacredApiKey','filmixApiUrl','filmixSiteUrl','filmixToken','filmixDeviceId'].forEach(function (key) { if (typeof data[key] === 'string') next[key] = key === 'torrserverPassword' || key === 'jacredApiKey' ? data[key] : data[key].trim(); });
+  if(!catalogBrowse.sources().some(function(source){return source.id===next.catalogBrowseProvider;}))throw new Error('Неизвестный источник каталога');
   ['filmixTransport','filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken','filmixWebUserAgent'].forEach(function(key){if(typeof data[key]==='string')next[key]=data[key].trim();});
   if(['web','mobile'].indexOf(next.filmixTransport)<0)throw new Error('Неизвестный способ подключения Filmix');
   ['filmixWebHash','filmixWebAccessToken','filmixWebRefreshToken','filmixWebUserAgent'].forEach(function(key){if(next[key].length>16384||/[\r\n]/.test(next[key]))throw new Error('Некорректная сессия Filmix TV');});
@@ -165,7 +168,8 @@ var server = http.createServer(function (req, res) {
     if (route === '/api/filmix/auth/disconnect' && req.method === 'POST') return filmix.disconnect();
     if (route.indexOf('/filmix-stream/')===0 && ['GET','HEAD'].indexOf(req.method)>=0) { filmix.stream(req,res,route.slice('/filmix-stream/'.length)); return null; }
     if (route === '/api/health' && req.method === 'GET') return ts('/echo', null, 6000).then(function (v) { return { ok: true, version: v.trim(), url: tsBase() }; });
-    if (route === '/api/catalog/browse' && req.method === 'GET') return catalog.browse(q);
+    if (route === '/api/catalog/sources' && req.method === 'GET') return {sources:catalogBrowse.sources()};
+    if (route === '/api/catalog/browse' && req.method === 'GET') return catalogBrowse.browse(q.provider||config.catalogBrowseProvider,q);
     if (route === '/api/catalog/home' && req.method === 'GET') {var provider=config.catalogProvider;return provider==='vilkadb'?catalog.home():catalog.externalHome(provider,function(){return provider==='filmix'?catalogFilmix.home(filmix):providers.home(provider);});}
     if (route === '/api/catalog/item' && req.method === 'GET') {var key=String(q.key||'');return /^filmix:/.test(key)?catalogFilmix.details(filmix,key):catalog.item(key);}
     if (route === '/catalog-poster' && (req.method === 'GET'||req.method === 'HEAD')) return catalogHttp.poster(req,res,String(q.url||''));

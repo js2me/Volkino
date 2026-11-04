@@ -106,7 +106,7 @@ export class Globals {
   detailScroll = 0;
   detailTorrentIndex = 0;
   searchFromDetail = false;
-  filmixOrigin: 'latest' | 'details' | 'search' = 'search';
+  filmixOrigin: 'latest' | 'details' | 'direct-details' | 'search' = 'search';
   filmixQuery = '';
   filmixResults: FilmixResult[] | null = null;
   filmixId = 0;
@@ -225,7 +225,8 @@ export class Globals {
     )
       return this.filmixOrigin === 'latest'
         ? 'latest'
-        : this.filmixOrigin === 'details'
+        : this.filmixOrigin === 'details' ||
+            this.filmixOrigin === 'direct-details'
           ? this.detailOrigin
           : 'search';
     return this.view;
@@ -333,7 +334,8 @@ export class Globals {
       if (this.filmixOrigin === 'latest') {
         this.source = 'torrent';
         this.change('latest');
-      } else this.change('filmix-search');
+      } else if (this.filmixOrigin === 'direct-details') this.change('details');
+      else this.change('filmix-search');
     } else
       this.change(
         this.searchFromDetail && this.detailItem ? 'details' : 'search',
@@ -358,6 +360,7 @@ export class Globals {
     else this.change('search');
   }
   openFilmix(id: number, title: string, resume?: HistoryItem) {
+    if (this.view === 'details') this.filmixOrigin = 'direct-details';
     if (this.view === 'latest') {
       this.filmixOrigin = 'latest';
       this.searchFromDetail = false;

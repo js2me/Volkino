@@ -71,8 +71,24 @@ export const Details = withViewModel(DetailsVM, ({ model }) => {
       </div>
       <section class="detail-torrents">
         <h2>Раздачи</h2>
+        <Show
+          when={
+            model.item?.provider === 'filmix' &&
+            !model.status &&
+            !model.results.length
+          }
+        >
+          <button class="btn" onClick={model.runSearch}>
+            Найти раздачи
+          </button>
+        </Show>
         <div id="search-results">
-          <Show when={!model.results.length}>
+          <Show
+            when={
+              !model.results.length &&
+              (model.item?.provider !== 'filmix' || model.status)
+            }
+          >
             <p class={model.error ? 'error-text' : 'muted'}>
               {model.status || 'Ничего не найдено. Попробуйте другое название.'}
             </p>

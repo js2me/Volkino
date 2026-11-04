@@ -861,6 +861,25 @@ h1.file-page-title {
   }
 }
 
+.catalog-source-bar {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  background: var(--color-surface-raised);
+}
+.catalog-source-bar .field {
+  min-width: 220px;
+}
+.catalog-source-bar .input {
+  width: 100%;
+}
+.catalog-source-bar p {
+  flex: 1;
+}
 .catalog-filters {
   display: flex;
   flex-wrap: wrap;

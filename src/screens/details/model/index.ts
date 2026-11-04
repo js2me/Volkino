@@ -55,7 +55,7 @@ export class DetailsVM extends VM {
     if (this.globals.detailsNeedsLoad && this.item) {
       this.globals.detailsNeedsLoad = false;
       const item = this.item;
-      this.runSearch();
+      if (item.provider !== 'filmix') this.runSearch();
       if (
         item.provider &&
         item.provider !== 'filmix' &&
@@ -85,7 +85,7 @@ export class DetailsVM extends VM {
             const query = data.searchTitle || data.title;
             if (query !== this.globals.state.query) {
               this.globals.state.query = query;
-              this.runSearch();
+              if (item.provider !== 'filmix') this.runSearch();
             }
           });
         },
@@ -141,7 +141,9 @@ export class DetailsVM extends VM {
     this.globals.openTorrentLink(result.magnet, result.title);
   }
   filmix() {
-    if (this.item)
+    if (this.item?.provider === 'filmix')
+      this.globals.openFilmix(Number(this.item.id.slice(7)), this.item.title);
+    else if (this.item)
       this.globals.filmixSearch(this.item.searchTitle || this.item.title);
   }
   back() {

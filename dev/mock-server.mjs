@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { browse, files, filmixDetails, filmixPost, genres, items, latest, poster, search, torrent } from './fixtures.mjs';
+import catalogBrowse from '../server/catalog-browse.js';
 
 const video = fileURLToPath(new URL('./assets/demo.mp4', import.meta.url));
 
@@ -44,7 +45,7 @@ async function streamVideo(req, res) {
 export function createMockMiddleware() {
   let config = {
     seekStep: 30, audioFix: 'off', torrserverMode: 'external', torrserverUrl: 'http://mock-torrserver:8090', torrserverUsername: '',
-    searchProvider: 'vilkadb', catalogProvider: 'vilkadb', jacredUrl: '', hasPassword: false, hasApiKey: false, hasFilmixToken: false,
+    searchProvider: 'vilkadb', catalogProvider: 'vilkadb', catalogBrowseProvider: 'vilkadb', jacredUrl: '', hasPassword: false, hasApiKey: false, hasFilmixToken: false,
     filmixApiUrl: 'http://mock-filmix/api/v2', filmixSiteUrl: 'http://mock-filmix',
   };
   let localState = 'stopped';
@@ -93,8 +94,22 @@ export function createMockMiddleware() {
             ...(config.catalogProvider === 'yts' ? [] : [{ id: 'series', title: 'Сериалы', items: items.filter(item => item.type === 'tv').slice(0, 12) }]),
           ], updatedAt: Date.now(), source: { vilkadb: 'VilkaDB', cub: 'CUB', filmix: 'Filmix', cinemeta: 'Cinemeta', yts: 'YTS' }[config.catalogProvider],
         });
-        case '/api/catalog/browse': return json(res, browse(url.searchParams, empty));
+        case '/api/catalog/sources': return json(res, {sources: catalogBrowse.definitions()});
+        case '/api/catalog/browse': {
+          const provider = url.searchParams.get('provider') || config.catalogBrowseProvider;
+          const source = catalogBrowse.definitions().find(source => source.id === provider);
+          if (!source) return json(res, {error: 'Неизвестный источник каталога'}, 400);
+          const filters = catalogBrowse.normalize(source, Object.fromEntries(url.searchParams));
+          const query = new URLSearchParams(filters);
+          const aliases = {g3:'28',g1:'18',g13:'10765',g6:'35',Action:'28',Drama:'18','Sci-Fi':'10765',Comedy:'35'};
+          if (aliases[filters.genre]) query.set('genre', aliases[filters.genre]);
+          const result = browse(query, empty);
+          const genre = source.fields.find(field => field.key === 'genre');
+          return json(res, {...result,provider,source:source.name,filters,genres:genre?.optionsByType || {movie:[],tv:[]},items:result.items.map(item => ({...item,provider,...(provider==='filmix'?{id:'filmix:'+item.filmixId}:{})}))});
+        }
         case '/api/catalog/item': {
+          const filmixKey = /^filmix:(\d+)$/.exec(url.searchParams.get('key') || '');
+          if (filmixKey) return json(res, {...filmixDetails(filmixKey[1]),id:'filmix:'+filmixKey[1],provider:'filmix'});
           const item = items.find(item => item.id === url.searchParams.get('key'));
           return item ? json(res, { ...item, metadata: `${item.year} · ${genres[item.type].find(genre => genre.id === item.genre).name} · TMDB ${item.rating}`, description: 'Демонстрационная история о путешествии, дружбе и неожиданных открытиях. Эти локальные данные позволяют проверить описание, поиск раздач, просмотр и возврат к выбранной карточке без подключения к внешним сервисам.' }) : json(res, { error: 'Карточка не найдена' }, 404);
         }

@@ -124,10 +124,12 @@ function createMobile(options){
   function authStart(){return api('token_request',null,'').then(function(r){var code=String(r.user_code||''),secret=r.user_dev_token||r.code;if(!code||typeof secret!=='string'||!secret)throw new Error('Filmix не выдал код устройства');pending={code:code,token:secret,expires:Date.now()+15*60*1000,base:config().filmixApiUrl||DEFAULT_API};return {code:code,activationUrl:(config().filmixSiteUrl||DEFAULT_SITE)+'/consoles'};});}
   function authCheck(){if(!pending||pending.expires<Date.now()||pending.base!==(config().filmixApiUrl||DEFAULT_API))return Promise.reject(new Error('Сначала получите новый код устройства'));return profile(true,pending.token).then(function(p){options.saveConfig({filmixToken:pending.token});pending=null;profileCache=null;return p;});}
   function disconnect(){options.saveConfig({filmixToken:''});pending=null;profileCache=null;grants={};return {ok:true};}
-  return {latest:latest,details:details,poster:poster,search:search,post:publicPost,grant:grant,stream:stream,profile:profile,authStart:authStart,authCheck:authCheck,disconnect:disconnect};
+  return {catalog:function(query){return api('catalog',query);},latest:latest,details:details,poster:poster,search:search,post:publicPost,grant:grant,stream:stream,profile:profile,authStart:authStart,authCheck:authCheck,disconnect:disconnect};
 }
 function create(options){
   var mobile,web,facade={};
+  // The public mobile catalogue is also usable with Filmix TV playback accounts.
+  facade.catalog=function(query){return (mobile||(mobile=createMobile(options))).catalog(query);};
   ['latest','details','poster','search','post','grant','stream','profile','authStart','authCheck','disconnect','login'].forEach(function(method){
     facade[method]=function(){
       var adapter;

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const catalogSources = require('../../server/catalog-browse').definitions();
 
 const genres = { movie: [{ id: '28', name: 'Боевик' }], tv: [{ id: '10765', name: 'Фантастика' }] };
 const items = Array.from({ length: 36 }, (_, i) => ({ id: 'tmdb:movie:' + (i + 1), title: 'Фильм ' + (i + 1), type: 'movie', year: '2026', rating: '8.5' }));
@@ -17,7 +18,8 @@ test.beforeEach(async ({ page }) => {
     const url = new URL(route.request().url());
     let data;
     if (url.pathname === '/api/session') data = { token: 'browser-test' };
-    else if (url.pathname === '/api/config') data = {};
+    else if (url.pathname === '/api/config') data = {catalogBrowseProvider:'vilkadb'};
+    else if (url.pathname === '/api/catalog/sources') data = {sources:catalogSources};
     else if (url.pathname === '/api/catalog/home') data = { sections: [], updatedAt: Date.now() };
     else if (url.pathname === '/api/catalog/browse') data = browse(url);
     else if (url.pathname === '/api/catalog/item') data = { ...items[0], id: url.searchParams.get('key'), description: 'Описание фильма' };
@@ -53,7 +55,7 @@ test('MobX updates filters, applies on OK, resets type-specific genre and append
   await page.locator('#catalog-apply').focus();
   await page.keyboard.press('Enter');
   const query = new URL((await request).url()).searchParams;
-  expect(Object.fromEntries(query)).toEqual({ type: 'tv', genre: '10765', minRating: '7', year: '2024', sort: 'rating', page: '1' });
+  expect(Object.fromEntries(query)).toEqual({ provider:'vilkadb', type: 'tv', genre: '10765', minRating: '7', year: '2024', sort: 'rating', page: '1' });
   await expect(page.locator('.catalog-summary')).toContainText('Сериалы · Фантастика · рейтинг от 7 · 2024 · По рейтингу');
   await expect(page.locator('.poster-card').first()).toBeFocused();
   await page.locator('#main').evaluate(main => { main.scrollTop = main.scrollHeight; });

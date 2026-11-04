@@ -22,6 +22,7 @@ export interface Config {
   hasPassword?: boolean;
   searchProvider?: string;
   catalogProvider?: string;
+  catalogBrowseProvider?: string;
   jacredUrl?: string;
   hasApiKey?: boolean;
   filmixTransport?: string;
