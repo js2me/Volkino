@@ -81,7 +81,7 @@ test('external adapters use their native capabilities and page sizes', async () 
   });
   const cub = await api.browse('cub', { year: '2024', page: 2 });
   assert.equal(urls[0].searchParams.get('airdate'), '2024');
-  assert.equal(urls[0].searchParams.get('sort'), 'now');
+  assert.equal(urls[0].searchParams.get('sort'), 'popular');
   assert.equal(cub.hasMore, true);
   const cinemeta = await api.browse('cinemeta', {
     type: 'tv',

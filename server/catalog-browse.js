@@ -127,11 +127,11 @@ function definitions() {
     {
       id: 'cub',
       name: 'CUB',
-      note: 'Последние добавления CUB с выбором типа и года.',
+      note: 'Популярные фильмы и сериалы CUB с выбором года.',
       fields: [
         field('type', 'Тип', types, 'movie'),
         years(),
-        sorts([['newest', 'Последние добавления']]),
+        sorts([['popular', 'Популярное']]),
       ],
     },
     {
@@ -255,7 +255,7 @@ function create(options) {
         .fetchJSON(
           'https://tmdb.cub.best/?cat=' +
             f.type +
-            '&sort=now&page=' +
+          '&sort=popular&page=' +
             f.page +
             (f.year ? '&airdate=' + f.year : ''),
         )

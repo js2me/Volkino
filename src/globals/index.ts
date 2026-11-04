@@ -82,6 +82,8 @@ export class Globals {
   routeRevision = 0;
   config: Config = {};
   startupError = '';
+  private startupPending = false;
+  private requestedStartView: View | null = null;
   toastText = '';
   connection = 'Проверяем сервер';
   connected: boolean | null = null;
@@ -107,6 +109,7 @@ export class Globals {
   detailTorrentIndex = 0;
   searchFromDetail = false;
   filmixOrigin: 'latest' | 'details' | 'direct-details' | 'search' = 'search';
+  private filesOrigin: View | null = null;
   filmixQuery = '';
   filmixResults: FilmixResult[] | null = null;
   filmixId = 0;
@@ -169,6 +172,7 @@ export class Globals {
     });
   }
   start() {
+    this.startupPending = true;
     if (this.lifecycle.signal.aborted) this.lifecycle = new AbortController();
     this.historyItems = watchHistory.load(localStorage);
     this.api<{ token: string }>('session', null, (error) => {
@@ -188,7 +192,10 @@ export class Globals {
           }
           this.config = config;
           this.persistHistory();
-          this.change('home');
+          this.startupPending = false;
+          const view = this.requestedStartView || this.view || 'home';
+          this.requestedStartView = null;
+          this.change(view);
           this.health();
         });
       });
@@ -218,6 +225,14 @@ export class Globals {
     );
   }
   get menuView() {
+    if (
+      this.view === 'files' &&
+      this.filesOrigin &&
+      this.filesOrigin !== 'filmix-search'
+    )
+      return this.filesOrigin === 'details'
+        ? this.detailOrigin
+        : this.filesOrigin;
     if (this.view === 'details') return this.detailOrigin;
     if (
       this.view === 'filmix-search' ||
@@ -232,6 +247,8 @@ export class Globals {
     return this.view;
   }
   change(view: View) {
+    // Routing must not leave a player writing progress against the next page's data.
+    if (this.player?.playing) this.player.stop();
     this.routeRevision++;
     this.navigation?.close(false);
     this.view = view;
@@ -243,6 +260,10 @@ export class Globals {
   }
   navigate(view: View) {
     this.searchFromDetail = false;
+    if (this.startupPending) {
+      this.requestedStartView = view;
+      return;
+    }
     this.change(view);
   }
   focusFirst() {
@@ -330,6 +351,10 @@ export class Globals {
     );
   }
   returnToResults() {
+    if (this.view === 'files' && this.filesOrigin) {
+      this.change(this.filesOrigin);
+      return;
+    }
     if (this.source === 'filmix') {
       if (this.filmixOrigin === 'latest') {
         this.source = 'torrent';
@@ -360,6 +385,7 @@ export class Globals {
     else this.change('search');
   }
   openFilmix(id: number, title: string, resume?: HistoryItem) {
+    if (this.view !== 'files') this.filesOrigin = this.view;
     if (this.view === 'details') this.filmixOrigin = 'direct-details';
     if (this.view === 'latest') {
       this.filmixOrigin = 'latest';
@@ -381,6 +407,7 @@ export class Globals {
     } else this.openTorrentLink(item.link, item.torrentTitle, item);
   }
   openTorrentLink(link: string, title: string, resume?: HistoryItem) {
+    if (this.view !== 'files') this.filesOrigin = this.view;
     this.source = 'torrent';
     this.filesRequest = { source: 'torrent', link, title, resume };
     this.change('files');

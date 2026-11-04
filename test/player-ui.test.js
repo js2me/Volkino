@@ -4,6 +4,20 @@ const assert=require('node:assert/strict');
 const {boot,files,hash}=require('./helpers/models');
 function item(id,position,duration=1000,extra={}){return{hash,fileId:id,title:'Episode',fileName:files[id-1].path,torrentTitle:'Series',link:'magnet:?xt=urn:btih:'+hash,position,duration,...extra};}
 function onlinePost(){return{title:'Online Series',maxQuality:720,voices:['Dub','Original'],seasons:[1,2],isSeries:true,files:[{id:10001,path:'Сезон 1/Серия 1',season:1,voice:'Dub',qualities:[720,480]},{id:10002,path:'Сезон 1/Серия 2',season:1,voice:'Dub',qualities:[720,480]},{id:10001,path:'Сезон 1/Серия 1',season:1,voice:'Original',qualities:[720]},{id:20001,path:'Сезон 2/Серия 1',season:2,voice:'Dub',qualities:[720]}]};}
+test('history keeps the playback identity when page data switches to another source',t=>{
+ const h=boot(t);h.play();h.video.currentTime=222;h.app.source='filmix';h.app.hash='';h.app.filmixId=42;h.app.torrent={title:'Different movie'};h.app.originalLink='filmix:42';h.player.saveHistory();
+ const saved=h.app.history();assert.equal(saved.length,1);assert.equal(saved[0].hash,hash);assert.equal(saved[0].source,undefined);assert.equal(saved[0].filmixId,undefined);assert.equal(saved[0].torrentTitle,'Series');assert.equal(saved[0].position,222);assert.match(saved[0].link,/^magnet:/);
+});
+test('Filmix requests and progress use the selected playback rather than later page data',t=>{
+ const h=boot(t);h.app.source='filmix';h.app.filmixId=42;h.app.filmixQuality=720;h.app.originalLink='filmix:42';h.app.torrent={title:'Original movie'};
+ const file={id:10001,path:'Сезон 1/Серия 1',season:1,voice:'Dub',qualities:[720,480]};h.player.play(file);
+ h.app.source='torrent';h.app.hash='f'.repeat(40);h.app.filmixId=99;h.app.filmixQuality=480;h.app.torrent={title:'Other movie'};h.app.originalLink='other-link';h.advance(100);
+ const request=h.requests.find(r=>r.route==='filmix/play');assert.equal(request.body.id,42);assert.equal(request.body.quality,720);h.reply('filmix/play',{url:'/original-filmix'});h.ready(321);h.player.saveHistory();
+ const saved=h.app.history()[0];assert.equal(saved.source,'filmix');assert.equal(saved.filmixId,42);assert.equal(saved.torrentTitle,'Original movie');assert.equal(saved.link,'filmix:42');assert.equal(saved.quality,720);assert.equal(saved.position,321);
+});
+test('leaving playback stops the player and prevents late requests from reopening it',t=>{
+ const h=boot(t);h.play();h.video.currentTime=234;h.app.navigate('catalog');assert.equal(h.player.playing,null);assert.equal(h.player.visible,false);assert.equal(h.video.paused,true);assert.equal(h.app.history()[0].position,234);h.reply('preload',null,new Error('late failure'));h.advance(10000);assert.equal(h.player.playing,null);
+});
 test('controls hide after seeking and recover without a playing event',t=>{
  const h=boot(t);h.play();h.player.seek(100);h.advance(250);h.video.readyState=2;h.advance(5000);assert.equal(h.player.overlay,true);
  h.video.readyState=4;h.video.emit('seeked');h.advance(5000);assert.equal(h.player.overlay,false);

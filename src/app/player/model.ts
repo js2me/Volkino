@@ -2,7 +2,12 @@ import { action, makeObservable, observable } from 'mobx';
 import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../shared/lib/mobx';
 import { create, pointerTime } from '../services/seek';
-import type { MediaFile, NativePlayback } from '../services/types';
+import type {
+  MediaFile,
+  NativePlayback,
+  SavedHistory,
+} from '../services/types';
+import { key as historyKey } from '../services/history';
 import { audioProcessor } from '../audio/processor';
 import { audioFixNames, type AudioFixMode } from '../audio/graph';
 
@@ -16,6 +21,10 @@ type TrackVideo = HTMLVideoElement & {
 };
 interface Playback {
   file: MediaFile;
+  identity: Omit<
+    SavedHistory,
+    'position' | 'duration' | 'updated' | 'completed'
+  >;
   started: number;
   lastSave: number;
   failed?: boolean;
@@ -242,7 +251,32 @@ export class PlayerVM extends VM {
     this.video.removeAttribute('src');
     this.video.load();
     this.episodesOpen = false;
-    this.playing = { file, started: Date.now(), lastSave: 0 };
+    this.playing = {
+      file,
+      started: Date.now(),
+      lastSave: 0,
+      identity: {
+        hash: this.globals.source === 'filmix' ? '' : this.globals.hash,
+        fileId: file.id,
+        fileName: file.path,
+        title: file.path.split('/').pop() || '',
+        torrentTitle:
+          this.globals.torrent?.title || this.globals.torrent?.name || '',
+        link:
+          this.globals.originalLink ||
+          'magnet:?xt=urn:btih:' + this.globals.hash,
+        ...(this.globals.source === 'filmix'
+          ? {
+              source: 'filmix' as const,
+              filmixId: this.globals.filmixId,
+              voice: file.voice,
+              season: file.season,
+              quality: this.globals.filmixQuality,
+            }
+          : {}),
+      },
+    };
+    const current = this.playing;
     this.resume = resume;
     this.visible = true;
     this.status =
@@ -258,12 +292,11 @@ export class PlayerVM extends VM {
     this.afterRender((root) =>
       root.querySelector<HTMLElement>('#player-back')?.focus(),
     );
-    const current = this.playing;
     if (!window.TWNativePlayer) this.attachAudio(current);
-    if (this.globals.source !== 'filmix')
+    if (current.identity.source !== 'filmix')
       this.globals.api(
         'preload',
-        { hash: this.globals.hash, index: file.id },
+        { hash: current.identity.hash, index: file.id },
         action((error) => {
           if (this.playing === current && error)
             this.status =
@@ -272,14 +305,15 @@ export class PlayerVM extends VM {
       );
     this.startTimer = setTimeout(() => {
       if (this.playing !== current) return;
-      if (this.globals.source === 'filmix') {
+      if (current.identity.source === 'filmix') {
         const levels = file.qualities || [];
         const quality =
-          levels.find((q) => q <= this.globals.filmixQuality) || levels[0];
+          levels.find((q) => q <= (current.identity.quality || 0)) || levels[0];
+        current.identity.quality = quality;
         this.globals.api<{ url: string }>(
           'filmix/play',
           {
-            id: this.globals.filmixId,
+            id: current.identity.filmixId,
             fileId: file.id,
             voice: file.voice,
             quality,
@@ -300,7 +334,7 @@ export class PlayerVM extends VM {
         this.startVideo(
           current,
           '/stream?hash=' +
-            encodeURIComponent(this.globals.hash) +
+            encodeURIComponent(current.identity.hash) +
             '&index=' +
             file.id,
         );
@@ -313,12 +347,12 @@ export class PlayerVM extends VM {
       this.video.load();
       current.failed = true;
       this.status =
-        this.globals.source === 'filmix'
+        current.identity.source === 'filmix'
           ? 'Не удалось начать просмотр Filmix за 60 секунд. Проверьте доступность видео и выберите другое качество.'
           : 'Не удалось начать просмотр за 60 секунд. Проверьте сидов и выберите другую раздачу; её видео или аудио также могут не поддерживаться телевизором.';
       this.showOverlay();
     }, 60000);
-    if (this.globals.source !== 'filmix') this.poll(current);
+    if (current.identity.source !== 'filmix') this.poll(current);
   }
   private startVideo(current: Playback, url: string) {
     if (this.playing !== current) return;
@@ -388,7 +422,7 @@ export class PlayerVM extends VM {
       )
         return;
       this.globals.api<{ torrent: import('../services/types').Torrent }>(
-        'status?hash=' + encodeURIComponent(this.globals.hash),
+        'status?hash=' + encodeURIComponent(current.identity.hash),
         null,
         action((error, data) => {
           if (
@@ -535,7 +569,9 @@ export class PlayerVM extends VM {
   saveHistory(opening = false, completed = false) {
     const current = this.playing;
     if (!current) return;
-    const previous = this.globals.watchedFile(current.file),
+    const previous = this.globals
+        .history()
+        .find((item) => historyKey(item) === historyKey(current.identity)),
       playback = current.nativePlayback || this.video;
     const position =
       opening ||
@@ -548,14 +584,7 @@ export class PlayerVM extends VM {
         ? playback.duration
         : previous?.duration || 0;
     this.globals.saveHistory({
-      hash: this.globals.hash,
-      fileId: current.file.id,
-      fileName: current.file.path,
-      title: this.title,
-      torrentTitle:
-        this.globals.torrent?.title || this.globals.torrent?.name || '',
-      link:
-        this.globals.originalLink || 'magnet:?xt=urn:btih:' + this.globals.hash,
+      ...current.identity,
       position,
       duration,
       completed:
@@ -563,15 +592,6 @@ export class PlayerVM extends VM {
         !!previous?.completed ||
         (!opening && duration > 0 && position / duration >= 0.95),
       updated: Date.now(),
-      ...(this.globals.source === 'filmix'
-        ? {
-            source: 'filmix' as const,
-            filmixId: this.globals.filmixId,
-            voice: current.file.voice,
-            season: current.file.season,
-            quality: this.globals.filmixQuality,
-          }
-        : {}),
     });
   }
   private pauseAndSave() {

@@ -16,22 +16,24 @@ export const Catalog = withViewModel(CatalogVM, () => {
       }}
     >
       <div class="catalog-source-bar">
-        <Field id="catalog-provider" label="Источник каталога">
-          <select
-            id="catalog-provider"
-            class="input"
-            value={model.catalog.provider}
-            disabled={!model.catalog.sources.length}
-            onChange={(event) =>
-              model.catalog.selectSource(event.currentTarget.value)
-            }
-          >
-            <For each={model.catalog.sources}>
-              {(source) => <option value={source.id}>{source.name}</option>}
-            </For>
-          </select>
-        </Field>
-        <p class="muted">{model.catalog.note}</p>
+        <label class="catalog-source-label" for="catalog-provider">
+          Источник
+        </label>
+        <select
+          id="catalog-provider"
+          class="input"
+          aria-label="Источник каталога"
+          value={model.catalog.provider}
+          disabled={!model.catalog.sources.length}
+          onChange={(event) =>
+            model.catalog.selectSource(event.currentTarget.value)
+          }
+        >
+          <For each={model.catalog.sources}>
+            {(source) => <option value={source.id}>{source.name}</option>}
+          </For>
+        </select>
+        <p class="catalog-source-note muted">{model.catalog.note}</p>
       </div>
       <form
         class="catalog-filters"
