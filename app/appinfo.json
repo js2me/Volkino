@@ -1,6 +1,6 @@
 {
   "id": "org.torrenter.watcher",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "vendor": "VolKino",
   "type": "web",
   "main": "launcher.html",

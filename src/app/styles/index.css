@@ -1582,13 +1582,13 @@ aside > nav::-webkit-scrollbar-thumb {
 
 .touch-controls {
   display: none;
-  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 12px;
+  margin: -10px 0 12px -10px;
 }
+.touch-controls .btn,
 .touch-controls .btn + .btn {
-  margin-left: 0;
+  margin: 10px 0 0 10px;
 }
 /* Tablets use CSS pixels; keep controls usable in both orientations and with the IME open. */
 @media (any-pointer: coarse) {
@@ -1813,10 +1813,12 @@ html[data-device="tablet"] .player-control-row > span:last-child {
 .player-options-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  /* webOS Chromium 68 does not support gap in flex layouts. */
+  margin: -14px 0 0 -14px;
 }
+.player-options-actions .btn,
 .player-options-actions .btn + .btn {
-  margin-left: 0;
+  margin: 14px 0 0 14px;
 }
 .player-options-actions .btn {
   font-size: 18px;
