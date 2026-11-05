@@ -50,8 +50,9 @@ if (process.argv.includes('--prepare')) { console.log('Android assets prepared')
 const release = process.argv.includes('--release');
 execFileSync(path.join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'), [release ? 'assembleRelease' : 'assembleDebug', '--console=plain'], { cwd: android, stdio: 'inherit' });
 const type = release ? 'release' : 'debug';
+const unsigned = release && !process.env.ANDROID_KEYSTORE_PATH;
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
-const dest = path.join(root, 'dist', `volkino_${pkg.version}_android-${type}${release ? '-unsigned' : ''}.apk`);
+const dest = path.join(root, 'dist', `volkino_${pkg.version}_android-${type}${unsigned ? '-unsigned' : ''}.apk`);
 fs.mkdirSync(path.dirname(dest), { recursive: true });
-fs.copyFileSync(path.join(android, `app/build/outputs/apk/${type}/app-${type}${release ? '-unsigned' : ''}.apk`), dest);
+fs.copyFileSync(path.join(android, `app/build/outputs/apk/${type}/app-${type}${unsigned ? '-unsigned' : ''}.apk`), dest);
 console.log(dest);

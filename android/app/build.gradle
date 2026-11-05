@@ -8,7 +8,7 @@ android {
         applicationId 'org.torrenter.watcher'
         minSdk 23
         targetSdk 35
-        versionCode 902
+        versionCode Integer.parseInt(System.getenv('VOLKINO_VERSION_CODE') ?: '902')
         versionName pkg.version
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', '-DANDROID_STL=c++_shared'; cppFlags '-std=c++17' } }
@@ -18,7 +18,22 @@ android {
     externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
     sourceSets { main { assets.srcDirs = ['build/generated/assets']; jniLibs.srcDirs = ['build/generated/jniLibs'] } }
     packaging { jniLibs { useLegacyPackaging true; keepDebugSymbols += ['**/libnode.so', '**/libtorrserver.so'] } }
-    buildTypes { release { minifyEnabled false } }
+    signingConfigs {
+        if (System.getenv('ANDROID_KEYSTORE_PATH')) {
+            release {
+                storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv('ANDROID_KEYSTORE_PATH')) signingConfig signingConfigs.release
+        }
+    }
 }
 
 // Keep Android Studio and command-line builds in sync with the webOS UI and helper.

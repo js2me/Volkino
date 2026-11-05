@@ -27,6 +27,21 @@ adb install -r dist/volkino_0.9.2_android-debug.apk
 
 Лицензии включены в assets APK: `NODE-LICENSE`, `TORRSERVER-LICENSE`, `LIBVLC-LICENSE`, `THIRD-PARTY-NOTICES.txt`. LibVLC Android 3.6.5 — LGPL-2.1; [исходники и инструкции сборки](https://code.videolan.org/videolan/libvlcjni/-/tree/3.6.5). Node.js Mobile — MIT и лицензии включённых компонентов; TorrServer — GPL-3.0. Точные исходники: [Node.js Mobile v18.20.4](https://github.com/nodejs-mobile/nodejs-mobile/tree/v18.20.4), [TorrServer MatriX.147.2](https://github.com/YouROK/TorrServer/tree/MatriX.147.2).
 
+## Автоматические релизы
+
+Каждый push в `main` запускает [Build and release](https://github.com/js2me/Volkino/actions/workflows/release.yml). После успешных проверок и сборок workflow публикует GitHub Release `v<версия>-build.<номер запуска>` со всеми пакетами:
+
+- `volkino_<версия>_all.ipk` — LG webOS;
+- `volkino_<версия>_android-release.apk` — подписанный APK для Android TV, планшетов и телефонов (ARMv7, ARM64, x86_64 в одном файле);
+- `volkino_<версия>_android-debug.apk` — отладочный APK для тех же архитектур;
+- `SHA256SUMS.txt` — контрольные суммы пакетов.
+
+Для обычной установки на Android скачивайте **release APK**. IPK по-прежнему требует рутованного webOS и настройки помощника, описанной ниже. Релизы доступны на [странице Releases](https://github.com/js2me/Volkino/releases). Сборку можно запустить вручную через Actions → Build and release → Run workflow для ветки `main`; повторный запуск того же workflow обновляет файлы его релиза.
+
+Ключ подписи хранится в GitHub Actions Secrets: `ANDROID_KEYSTORE_BASE64` (PKCS12 в Base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. При переносе репозитория перенесите эти секреты: замена ключа не позволит обновлять уже установленный release APK с сохранением данных. Debug APK использует временный ключ runner; для регулярных обновлений используйте release APK. CI задаёт Android `versionCode` как `1000 + github.run_number`; при переименовании workflow сохраните рост номера относительно опубликованных APK.
+
+Локально `npm run build:android:release` по умолчанию создаёт неподписанный APK. Для подписанной сборки передайте `ANDROID_KEYSTORE_PATH` (абсолютный путь), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`; для обновления APK из CI также задайте больший `VOLKINO_VERSION_CODE`. Ключи и локальный файл `android/release-signing.json` исключены из Git.
+
 ## Требования
 
 - Рутованный LG webOS с webOSbrew/Homebrew Channel, SSH, `/usr/bin/node` 8.12+ (проверено на webOS 5.6.0).
