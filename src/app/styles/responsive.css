@@ -1,0 +1,570 @@
+/* Touch controls also apply to large tablets. TV keeps its remote layout. */
+@media (any-pointer: coarse), (max-width: 850px) {
+  html:not([data-device="tv"]) .touch-controls {
+    display: flex;
+  }
+  html:not([data-device="tv"]) .player-control-row > span:last-child,
+  html:not([data-device="tv"]) .player-options-hint,
+  html:not([data-device="tv"]) .episode-hint {
+    display: none;
+  }
+  html:not([data-device="tv"]) #player-top {
+    padding: 20px 24px;
+    max-height: 40%;
+    overflow: auto;
+  }
+  html:not([data-device="tv"]) #player-controls {
+    padding: 36px 24px 20px;
+    max-height: 60%;
+    overflow: auto;
+  }
+  html:not([data-device="tv"]) #player-top h2 {
+    font-size: 23px;
+    overflow-wrap: break-word;
+  }
+  html:not([data-device="tv"]) #player-top .eyebrow {
+    display: none;
+  }
+  html:not([data-device="tv"]) .touch-controls .btn {
+    font-size: 16px;
+    min-height: 48px;
+    padding: 12px 16px;
+  }
+}
+
+html[data-device="tablet"] .touch-controls {
+  display: flex;
+}
+html[data-device="tablet"] .player-control-row > span:last-child {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  html:not([data-device="tv"]) body {
+    font-size: 18px;
+  }
+  html:not([data-device="tv"]) aside {
+    width: 190px;
+    padding: 18px 10px;
+    overflow-y: auto;
+  }
+  html:not([data-device="tv"]) .brand {
+    margin: 0 0 20px;
+  }
+  html:not([data-device="tv"]) .brand-mark {
+    width: 46px;
+    height: 46px;
+    margin-right: 8px;
+  }
+  html:not([data-device="tv"]) .brand strong {
+    font-size: 14px;
+  }
+  html:not([data-device="tv"]) .nav {
+    padding: 12px 8px;
+    min-height: 48px;
+  }
+  html:not([data-device="tv"]) .nav span {
+    font-size: 15px;
+    margin-left: 8px;
+  }
+  html:not([data-device="tv"]) .nav-icon {
+    width: 22px;
+    height: 22px;
+  }
+  html:not([data-device="tv"]) .sidebar-bottom {
+    margin-top: auto;
+    padding-top: 16px;
+  }
+  html:not([data-device="tv"]) .connection {
+    margin: 12px 8px;
+    font-size: 12px;
+  }
+  html:not([data-device="tv"]) main {
+    padding: 20px 24px;
+  }
+  html:not([data-device="tv"]) .two-columns {
+    flex-wrap: wrap;
+  }
+  html:not([data-device="tv"]) .two-columns .field {
+    flex: 1 1 220px;
+  }
+  html:not([data-device="tv"]) .movie-details > .poster-art {
+    flex-basis: 150px;
+    width: 150px;
+    height: 225px;
+  }
+  html:not([data-device="tv"]) .movie-detail-body {
+    padding-left: 20px;
+  }
+  html:not([data-device="tv"]) .movie-name {
+    font-size: 28px;
+  }
+  html:not([data-device="tv"]) .detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 20px 0 8px -12px;
+  }
+  html:not([data-device="tv"]) .detail-actions .btn {
+    margin: 0 0 12px 12px;
+  }
+  html:not([data-device="tv"]) .search-form {
+    flex-wrap: wrap;
+    margin-left: -10px;
+  }
+  html:not([data-device="tv"]) .search-form .input {
+    flex: 1 1 100%;
+    margin: 0 0 10px 10px;
+  }
+  html:not([data-device="tv"]) .search-form .btn {
+    margin: 0 0 0 10px;
+    min-width: 0;
+  }
+}
+
+/* A scrolling tab bar leaves the full screen width for the active page. */
+@media (max-width: 850px) {
+  html:not([data-device="tv"]) body {
+    height: 100dvh;
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) #shell {
+    flex-direction: column;
+    min-height: 0;
+  }
+  html:not([data-device="tv"]) aside {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-left: calc(12px + env(safe-area-inset-left, 0px));
+    padding-right: calc(12px + env(safe-area-inset-right, 0px));
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+    overflow: hidden;
+  }
+  html:not([data-device="tv"]) aside .brand,
+  html:not([data-device="tv"]) .nav-label,
+  html:not([data-device="tv"]) .connection,
+  html:not([data-device="tv"]) .version {
+    display: none;
+  }
+  html:not([data-device="tv"]) aside > nav {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px;
+    scrollbar-width: none;
+  }
+  html:not([data-device="tv"]) aside > nav::-webkit-scrollbar {
+    display: none;
+  }
+  html:not([data-device="tv"]) .nav {
+    flex-shrink: 0;
+    width: auto;
+    padding: 10px;
+    margin: 0 4px 0 0;
+    white-space: nowrap;
+  }
+  html:not([data-device="tv"]) .sidebar-bottom {
+    margin: 0 0 0 8px;
+    padding: 4px 0 4px 8px;
+    border-left: 1px solid var(--color-border);
+  }
+  html:not([data-device="tv"]) .sidebar-bottom .nav {
+    margin: 0;
+  }
+  html:not([data-device="tv"]) .sidebar-bottom .nav span {
+    display: none;
+  }
+  html:not([data-device="tv"]) main {
+    min-height: 0;
+    padding: 20px 16px;
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    scroll-padding: 12px;
+  }
+  html:not([data-device="tv"]) h2 {
+    font-size: 23px;
+  }
+  html:not([data-device="tv"]) .screen-header {
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  html:not([data-device="tv"]) .screen-header h1 {
+    font-size: 28px;
+    overflow-wrap: break-word;
+  }
+  html:not([data-device="tv"]) .screen-header-tools {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+  html:not([data-device="tv"]) .screen-header-tools .btn {
+    min-height: 44px;
+  }
+  html:not([data-device="tv"]) .mobile-back {
+    display: inline-block;
+  }
+  html:not([data-device="tv"]) .input {
+    height: 52px;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .btn {
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 16px;
+    overflow-wrap: break-word;
+    max-width: 100%;
+  }
+  html:not([data-device="tv"]) .muted,
+  html:not([data-device="tv"]) .empty p {
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .field label {
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .field small {
+    font-size: 14px;
+  }
+  html:not([data-device="tv"]) .home-intro {
+    flex-wrap: wrap;
+    margin-top: 0;
+  }
+  html:not([data-device="tv"]) .home-intro p {
+    max-width: 100%;
+    margin-bottom: 12px;
+  }
+  html:not([data-device="tv"]) .home-section h2 {
+    font-size: 22px;
+  }
+  html:not([data-device="tv"]) .catalog-section-head {
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  html:not([data-device="tv"]) .catalog-section-head h2 {
+    margin: 0 12px 6px 0;
+  }
+  html:not([data-device="tv"]) .catalog-section-head .muted {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  html:not([data-device="tv"]) .catalog-source-bar .input {
+    margin-right: 0;
+  }
+  html:not([data-device="tv"]) .catalog-source-note {
+    flex-basis: 100%;
+    font-size: 14px;
+    margin-top: 10px;
+  }
+  html:not([data-device="tv"]) .catalog-filters,
+  html:not([data-device="tv"]) .filmix-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-gap: 12px;
+    margin-bottom: 16px;
+  }
+  html:not([data-device="tv"]) .catalog-filters .field,
+  html:not([data-device="tv"]) .filmix-filters .field {
+    min-width: 0;
+    margin: 0;
+  }
+  html:not([data-device="tv"]) .catalog-filters .input,
+  html:not([data-device="tv"]) .filmix-filters .input {
+    font-size: 16px;
+    padding: 10px;
+    height: 52px;
+  }
+  html:not([data-device="tv"]) .catalog-filters .btn {
+    min-height: 48px;
+    margin: 0;
+    grid-column: 1 / -1;
+  }
+  html:not([data-device="tv"]) .catalog-filter-hint {
+    display: none;
+  }
+  html:not([data-device="tv"]) .catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-gap: 16px;
+    padding: 4px;
+  }
+  html:not([data-device="tv"]) .catalog-grid .poster-card {
+    min-width: 0;
+    width: 100%;
+    margin: 0;
+  }
+  html:not([data-device="tv"]) .catalog-grid .poster-art {
+    height: auto;
+    padding-top: 150%;
+  }
+  html:not([data-device="tv"]) .section-head {
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  html:not([data-device="tv"]) .section-head h2 {
+    margin: 0 12px 10px 0;
+  }
+  html:not([data-device="tv"]) .sort {
+    max-width: 100%;
+    height: 48px;
+  }
+  html:not([data-device="tv"]) .torrent {
+    padding: 14px 12px;
+    min-height: 80px;
+  }
+  html:not([data-device="tv"]) .torrent-number {
+    font-size: 14px;
+    min-width: 20px;
+    margin-right: 10px;
+  }
+  html:not([data-device="tv"]) .torrent-title {
+    font-size: 17px;
+    overflow-wrap: anywhere;
+  }
+  html:not([data-device="tv"]) .torrent-meta {
+    font-size: 13px;
+    line-height: 1.6;
+    margin-top: 6px;
+    overflow-wrap: anywhere;
+  }
+  html:not([data-device="tv"]) .torrent-meta span {
+    margin-right: 10px;
+  }
+  html:not([data-device="tv"]) .torrent-arrow {
+    font-size: 22px;
+    margin-left: 10px;
+  }
+  html:not([data-device="tv"]) .empty {
+    padding: 24px;
+    margin-top: 20px;
+    border-radius: 16px;
+    overflow-wrap: break-word;
+  }
+  html:not([data-device="tv"]) .empty h2 {
+    font-size: 25px;
+  }
+  html:not([data-device="tv"]) .empty .btn {
+    margin: 0 8px 12px 0;
+  }
+  html:not([data-device="tv"]) .steps {
+    flex-direction: column;
+    margin-top: 12px;
+    padding-top: 16px;
+  }
+  html:not([data-device="tv"]) .steps span {
+    margin: 0 0 10px;
+  }
+  html:not([data-device="tv"]) .statusbar {
+    padding: 12px;
+    font-size: 14px;
+  }
+  html:not([data-device="tv"]) #toast {
+    left: 16px;
+    right: 16px;
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    padding: 16px;
+    font-size: 16px;
+    overflow-wrap: break-word;
+  }
+  html:not([data-device="tv"]) .remote-select-backdrop {
+    padding: 16px;
+  }
+  html:not([data-device="tv"]) .remote-select-dialog {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    max-height: 85dvh;
+    padding: 20px 16px;
+  }
+  html:not([data-device="tv"]) .remote-select-dialog h2 {
+    font-size: 22px;
+    overflow-wrap: break-word;
+  }
+  html:not([data-device="tv"]) .remote-select-hint {
+    display: none;
+  }
+  html:not([data-device="tv"]) .remote-select-options {
+    min-height: 0;
+    max-height: none;
+  }
+  html:not([data-device="tv"]) .remote-select-option {
+    font-size: 16px;
+    min-height: 48px;
+    padding: 12px;
+    overflow-wrap: break-word;
+  }
+  /* Keep the list as the scroll root for loading and restoring its position. */
+  html:not([data-device="tv"]) .latest-main {
+    display: flex;
+    flex-direction: column;
+  }
+  html:not([data-device="tv"]) .latest-main #screen-header {
+    flex-shrink: 0;
+  }
+  html:not([data-device="tv"]) .latest-main #content,
+  html:not([data-device="tv"]) .latest-screen,
+  html:not([data-device="tv"]) #latest-results {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  html:not([data-device="tv"]) .latest-layout {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+  html:not([data-device="tv"]) .latest-list {
+    flex-basis: 100%;
+    padding: 4px;
+  }
+  html:not([data-device="tv"]) .latest-preview {
+    display: none;
+  }
+  html:not([data-device="tv"]) .latest-row .torrent-title {
+    font-size: 17px;
+    white-space: normal;
+  }
+  html:not([data-device="tv"]) .latest-note {
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+  html:not([data-device="tv"]) #player-top {
+    padding: 16px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  }
+  html:not([data-device="tv"]) #player-controls {
+    padding: 24px 16px 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  html:not([data-device="tv"]) #player-top,
+  html:not([data-device="tv"]) #player-controls {
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  }
+  html:not([data-device="tv"]) #player-top h2 {
+    font-size: 18px;
+  }
+  html:not([data-device="tv"]) #playing-status,
+  html:not([data-device="tv"]) #audio-mode-status {
+    font-size: 14px;
+  }
+  html:not([data-device="tv"]) .player-options-actions .btn {
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .episode-card {
+    flex-basis: 240px;
+    padding: 14px;
+  }
+  html:not([data-device="tv"]) .episode-name,
+  html:not([data-device="tv"]) #player-time {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  html:not([data-device="tv"]) .screen-header {
+    align-items: flex-start;
+  }
+  html:not([data-device="tv"]) .screen-header h1 {
+    flex-basis: 100%;
+    margin-right: 0;
+    font-size: 26px;
+    max-height: none;
+  }
+  html:not([data-device="tv"]) .screen-header-tools:not(:empty) {
+    margin-top: 12px;
+  }
+  html:not([data-device="tv"]) .poster-card {
+    flex-basis: 142px;
+    width: 142px;
+    margin-right: 12px;
+  }
+  html:not([data-device="tv"]) .poster-art {
+    height: 210px;
+  }
+  html:not([data-device="tv"]) .poster-name {
+    font-size: 16px;
+    height: 42px;
+    margin: 10px 10px 6px;
+  }
+  html:not([data-device="tv"]) .poster-meta {
+    font-size: 13px;
+    margin: 0 10px;
+  }
+  html:not([data-device="tv"]) .poster-rating {
+    font-size: 13px;
+    top: 8px;
+    left: 8px;
+  }
+  html:not([data-device="tv"]) .catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-gap: 12px;
+  }
+  html:not([data-device="tv"]) .continue-card {
+    flex-basis: 85%;
+    width: 85%;
+    min-width: 0;
+    padding: 16px;
+  }
+  html:not([data-device="tv"]) .continue-name {
+    font-size: 18px;
+  }
+  html:not([data-device="tv"]) .two-columns {
+    display: block;
+  }
+  html:not([data-device="tv"]) .two-columns .field + .field {
+    margin-left: 0;
+  }
+  html:not([data-device="tv"]) .settings-actions .btn {
+    width: 100%;
+    margin: 0 0 12px;
+  }
+  html:not([data-device="tv"]) .panel > div > .btn {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+  }
+  html:not([data-device="tv"]) .search-form .btn {
+    flex: 1;
+  }
+  html:not([data-device="tv"]) .movie-details {
+    flex-direction: column;
+    padding-top: 0;
+  }
+  html:not([data-device="tv"]) .movie-details > .poster-art {
+    flex: none;
+    align-self: center;
+    width: 160px;
+    height: 240px;
+    margin-bottom: 20px;
+  }
+  html:not([data-device="tv"]) .movie-detail-body {
+    padding: 0;
+    overflow-wrap: break-word;
+  }
+  html:not([data-device="tv"]) .movie-name {
+    font-size: 28px;
+  }
+  html:not([data-device="tv"]) .movie-metadata {
+    font-size: 15px;
+  }
+  html:not([data-device="tv"]) .movie-description {
+    font-size: 16px;
+    max-height: none;
+    overflow: visible;
+  }
+  html:not([data-device="tv"]) .detail-actions {
+    margin: 20px 0 0;
+  }
+  html:not([data-device="tv"]) .detail-actions .btn {
+    width: 100%;
+    margin: 0 0 12px;
+  }
+}

@@ -17,6 +17,7 @@ import { Navigation } from './navigation';
 import { Player } from './player/ui';
 import { ScreenHeader } from './ui/screen-header';
 import './styles/index.css';
+import './styles/responsive.css';
 
 const Application = withViewModel(AppVM, ({ model }) => {
   const globals = model.globals;
@@ -41,7 +42,7 @@ const Application = withViewModel(AppVM, ({ model }) => {
             <strong>VOLKINO</strong>
           </div>
           <div class="nav-label">БИБЛИОТЕКА</div>
-          <nav>
+          <nav aria-label="Основная навигация">
             <button
               id="nav-home"
               data-view="home"
@@ -215,6 +216,7 @@ const Application = withViewModel(AppVM, ({ model }) => {
           <div class="sidebar-bottom">
             <button
               data-view="settings"
+              aria-label="Настройки"
               class={globals.menuView === 'settings' ? 'nav active' : 'nav'}
               onClick={() => globals.navigate('settings')}
             >
@@ -253,7 +255,10 @@ const Application = withViewModel(AppVM, ({ model }) => {
             <div class="version">webOS · v0.9.2</div>
           </div>
         </aside>
-        <main id="main">
+        <main
+          id="main"
+          classList={{ 'latest-main': globals.view === 'latest' }}
+        >
           <div id="screen-header">
             <ScreenHeader
               title={globals.title}

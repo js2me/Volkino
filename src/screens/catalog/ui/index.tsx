@@ -83,7 +83,7 @@ export const Catalog = withViewModel(CatalogVM, () => {
           Показать
         </button>
       </form>
-      <p class="muted">
+      <p class="muted catalog-filter-hint">
         Стрелки — переход между полями · OK — выбрать значение. Нажмите
         «Показать», чтобы применить фильтры.
       </p>

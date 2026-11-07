@@ -1,4 +1,5 @@
 import { For, Show } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { withViewModel } from 'mobx-view-model-solid';
 import { FilesVM } from '../model';
 import { ScreenMessage } from '../../../app/ui/screen-message';
@@ -10,6 +11,11 @@ export const Files = withViewModel(FilesVM, ({ model }) => {
         model.root = element;
       }}
     >
+      <Portal mount={document.getElementById('screen-header-tools')!}>
+        <button class="btn mobile-back" onClick={model.back}>
+          ← Назад
+        </button>
+      </Portal>
       <Show when={model.loading}>
         <ScreenMessage
           title={
