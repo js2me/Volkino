@@ -4,6 +4,7 @@ import { VM } from '../../shared/lib/mobx';
 import { create, pointerTime } from '../services/seek';
 import type {
   MediaFile,
+  DownloadItem,
   NativePlayback,
   SavedHistory,
 } from '../services/types';
@@ -21,6 +22,7 @@ type TrackVideo = HTMLVideoElement & {
 };
 interface Playback {
   file: MediaFile;
+  download?: DownloadItem;
   identity: Omit<
     SavedHistory,
     'position' | 'duration' | 'updated' | 'completed'
@@ -235,7 +237,7 @@ export class PlayerVM extends VM {
       for (const type of ['addtrack', 'removetrack', 'change'])
         video.audioTracks.addEventListener(type, this.updateOptions);
   }
-  play(file: MediaFile, resume = 0) {
+  play(file: MediaFile, resume = 0, download?: DownloadItem) {
     if (!this.seekControl) return;
     this.closeOptions();
     if (this.playing) this.saveHistory();
@@ -253,9 +255,11 @@ export class PlayerVM extends VM {
     this.episodesOpen = false;
     this.playing = {
       file,
+      download,
       started: Date.now(),
       lastSave: 0,
       identity: {
+        downloadId: undefined,
         hash: this.globals.source === 'filmix' ? '' : this.globals.hash,
         fileId: file.id,
         fileName: file.path,
@@ -277,10 +281,13 @@ export class PlayerVM extends VM {
       },
     };
     const current = this.playing;
+    if (download)
+      current.identity = { ...download.identity, downloadId: download.id };
     this.resume = resume;
     this.visible = true;
-    this.status =
-      this.globals.source === 'filmix'
+    this.status = download
+      ? 'Открываем скачанное видео…'
+      : this.globals.source === 'filmix'
         ? 'Загружаем видео Filmix…'
         : 'Буферизация · получаем данные от TorrServer…';
     this.backVisible = true;
@@ -293,7 +300,7 @@ export class PlayerVM extends VM {
       root.querySelector<HTMLElement>('#player-back')?.focus(),
     );
     if (!window.TWNativePlayer) this.attachAudio(current);
-    if (current.identity.source !== 'filmix')
+    if (!download && current.identity.source !== 'filmix')
       this.globals.api(
         'preload',
         { hash: current.identity.hash, index: file.id },
@@ -305,6 +312,10 @@ export class PlayerVM extends VM {
       );
     this.startTimer = setTimeout(() => {
       if (this.playing !== current) return;
+      if (download) {
+        this.startVideo(current, download.url);
+        return;
+      }
       if (current.identity.source === 'filmix') {
         const levels = file.qualities || [];
         const quality =
@@ -346,13 +357,14 @@ export class PlayerVM extends VM {
       this.video.removeAttribute('src');
       this.video.load();
       current.failed = true;
-      this.status =
-        current.identity.source === 'filmix'
+      this.status = current.download
+        ? 'Не удалось открыть скачанное видео. Проверьте файл или скачайте его заново.'
+        : current.identity.source === 'filmix'
           ? 'Не удалось начать просмотр Filmix за 60 секунд. Проверьте доступность видео и выберите другое качество.'
           : 'Не удалось начать просмотр за 60 секунд. Проверьте сидов и выберите другую раздачу; её видео или аудио также могут не поддерживаться телевизором.';
       this.showOverlay();
     }, 60000);
-    if (current.identity.source !== 'filmix') this.poll(current);
+    if (!download && current.identity.source !== 'filmix') this.poll(current);
   }
   private startVideo(current: Playback, url: string) {
     if (this.playing !== current) return;
@@ -826,8 +838,9 @@ export class PlayerVM extends VM {
     }
     if (type === 'waiting' && this.playing && !this.playing.failed) {
       if (!this.seekControl.isBusy())
-        this.status =
-          this.globals.source === 'filmix'
+        this.status = this.playing.download
+          ? 'Читаем скачанное видео…'
+          : this.globals.source === 'filmix'
             ? 'Буферизация · ждём данные Filmix…'
             : 'Буферизация · ждём данные от участников раздачи…';
       this.showOverlay();
@@ -850,14 +863,16 @@ export class PlayerVM extends VM {
     if (type === 'error' && this.playing) {
       const code = video.error?.code || 0;
       this.status =
-        code === 4
-          ? 'Формат видео или аудио не поддерживается телевизором. Выберите другое видео или качество.'
-          : 'Ошибка потока (' +
-            code +
-            '). ' +
-            (this.globals.source === 'filmix'
-              ? 'Проверьте Filmix или выберите другое качество.'
-              : 'Проверьте TorrServer и доступность сидов.');
+        this.playing.download && code !== 4
+          ? 'Не удалось прочитать скачанное видео. Скачайте его заново.'
+          : code === 4
+            ? 'Формат видео или аудио не поддерживается телевизором. Выберите другое видео или качество.'
+            : 'Ошибка потока (' +
+              code +
+              '). ' +
+              (this.globals.source === 'filmix'
+                ? 'Проверьте Filmix или выберите другое качество.'
+                : 'Проверьте TorrServer и доступность сидов.');
       this.showOverlay();
     }
     if (type === 'timeupdate') {

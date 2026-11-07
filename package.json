@@ -8,7 +8,7 @@
     "test": "npm run build:test-models && node --test test/*.test.js",
     "build:test-models": "tsc --noEmit false --outDir work/test-models --module Node16 --moduleResolution Node16 --noCheck",
     "build": "npm run build:ui && node scripts/package.mjs",
-    "check": "node --check server/index.js && node --check server/core.js && node --check server/filmix.js && node --check server/filmix-web.js && node --check server/local-torrserver.js && tsc --noEmit && npm run format:check",
+    "check": "node --check server/index.js && node --check server/core.js && node --check server/downloads.js && node --check server/filmix.js && node --check server/filmix-web.js && node --check server/local-torrserver.js && tsc --noEmit && npm run format:check",
     "format": "biome format --write src",
     "format:check": "biome format src",
     "prestart": "npm run build:ui",

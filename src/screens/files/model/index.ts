@@ -9,6 +9,7 @@ import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../../shared/lib/mobx';
 import type {
   FilesRequest,
+  DownloadItem,
   FilmixPost,
   MediaFile,
   Torrent,
@@ -16,6 +17,8 @@ import type {
 import type { HistoryItem } from '../../../shared/types/screens';
 
 export class FilesVM extends VM {
+  saving: number[] = [];
+  saved: number[] = [];
   loading = false;
   error = '';
   timedOut = false;
@@ -27,6 +30,9 @@ export class FilesVM extends VM {
     super(params);
     this.intent = this.globals.filesRequest;
     makeObservable(this, {
+      saving: observable.ref,
+      saved: observable.ref,
+      save: action.bound,
       loading: observable,
       error: observable,
       timedOut: observable,
@@ -153,6 +159,7 @@ export class FilesVM extends VM {
     else if (key === 'season') this.globals.filmixSeason = Number(value);
     else this.globals.filmixQuality = Number(value);
     this.applyFilters();
+    this.saved = [];
   }
   private poll(request: number, started: number, resume?: HistoryItem) {
     this.globals.api<{ torrent: Torrent; files: MediaFile[] }>(
@@ -201,6 +208,32 @@ export class FilesVM extends VM {
       const file =
         resume && this.globals.files.find((file) => file.id === resume.fileId);
       if (file) this.globals.player?.play(file, resume.position || 0);
+    });
+  }
+  save(file: MediaFile) {
+    if (this.saving.includes(file.id) || this.saved.includes(file.id)) return;
+    this.saving = [...this.saving, file.id];
+    const globals = this.globals;
+    const body =
+      globals.source === 'filmix'
+        ? {
+            source: 'filmix',
+            id: globals.filmixId,
+            fileId: file.id,
+            voice: file.voice,
+            quality: globals.filmixQuality,
+          }
+        : { source: 'torrent', hash: globals.hash, fileId: file.id };
+    globals.api<DownloadItem>('downloads/save', body, (error) => {
+      if (this.unmountSignal.aborted) return;
+      runInAction(() => {
+        this.saving = this.saving.filter((id) => id !== file.id);
+        if (!error) this.saved = [...this.saved, file.id];
+        globals.toast(
+          error?.message ||
+            'Видео добавлено в «Скачанное». Дождитесь завершения загрузки.',
+        );
+      });
     });
   }
   play(file: MediaFile) {

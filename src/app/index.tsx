@@ -6,6 +6,7 @@ import { Catalog } from '../screens/catalog/ui';
 import { Latest } from '../screens/latest/ui';
 import { Home } from '../screens/home/ui';
 import { Search } from '../screens/search/ui';
+import { Downloads } from '../screens/downloads/ui';
 import { History } from '../screens/history/ui';
 import { Torrents } from '../screens/torrents/ui';
 import { Settings } from '../screens/settings/ui';
@@ -164,6 +165,27 @@ const Application = withViewModel(AppVM, ({ model }) => {
               <span>История</span>
             </button>
             <button
+              data-view="downloads"
+              class={globals.menuView === 'downloads' ? 'nav active' : 'nav'}
+              onClick={() => globals.navigate('downloads')}
+            >
+              <svg
+                class="nav-icon"
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
+              </svg>
+              <span>Скачанное</span>
+            </button>
+            <button
               data-view="torrents"
               class={globals.menuView === 'torrents' ? 'nav active' : 'nav'}
               onClick={() => globals.navigate('torrents')}
@@ -282,6 +304,9 @@ const Application = withViewModel(AppVM, ({ model }) => {
                 </Match>
                 <Match when={globals.view === 'history'}>
                   <History />
+                </Match>
+                <Match when={globals.view === 'downloads'}>
+                  <Downloads />
                 </Match>
                 <Match when={globals.view === 'torrents'}>
                   <Torrents />

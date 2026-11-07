@@ -9,6 +9,7 @@ export interface ScreenAPI {
 }
 
 export interface HistoryItem {
+  downloadId?: string;
   hash: string;
   fileId: number;
   title: string;

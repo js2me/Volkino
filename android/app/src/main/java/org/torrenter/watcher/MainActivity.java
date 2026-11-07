@@ -72,7 +72,7 @@ public final class MainActivity extends Activity {
                 handler.post(() -> {
                     if (destroyed || !loaded || !local(Uri.parse(web.getUrl()))) return;
                     Uri uri = Uri.parse(path);
-                    if (uri.isAbsolute() || !(path.startsWith("/stream?") || path.startsWith("/filmix-stream/"))) return;
+                    if (uri.isAbsolute() || !(path.startsWith("/stream?") || path.startsWith("/filmix-stream/") || path.startsWith("/download-media/"))) return;
                     playerToken = token;
                     Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
                     intent.putExtra("url", origin + path); intent.putExtra("title", title);

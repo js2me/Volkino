@@ -29,6 +29,35 @@ var filmix=filmixModule.create({getConfig:function(){return config;},saveConfig:
 var providers=providerModule.create({fetchJSON:catalogHttp.json});
 var catalogBrowse=require('./catalog-browse').create({vilkadb:catalog,filmix:filmix,fetchJSON:catalogHttp.json,identity:function(provider){return provider==='filmix'?(config.filmixApiUrl||'')+'|'+(config.filmixToken||''):'';}});
 if(!catalogBrowse.sources().some(function(source){return source.id===config.catalogBrowseProvider;}))config.catalogBrowseProvider='filmix';
+var downloads = require('./downloads').create({
+  directory:path.join(path.dirname(CONFIG), 'downloads'),
+  base:function () { return 'http://127.0.0.1:' + server.address().port; },
+  resolve:function (spec) {
+    if (spec.source === 'filmix') return filmix.grant(spec).then(function (grant) { return grant.url; });
+    return Promise.resolve('/stream?hash=' + spec.hash + '&index=' + spec.fileId);
+  }
+});
+function saveDownload(b) {
+  var spec, identity;
+  if (b.source === 'filmix') {
+    spec = {source:'filmix', id:Number(b.id), fileId:Number(b.fileId), voice:String(b.voice || ''), quality:Number(b.quality)};
+    return filmix.post(spec.id).then(function (post) {
+      var file = post.files.find(function (file) { return file.id === spec.fileId && file.voice === spec.voice; });
+      if (!file) throw new Error('Видео не найдено');
+      spec.quality = (file.qualities || []).filter(function (q) { return q <= spec.quality; }).sort(function (a,b) { return b-a; })[0];
+      if (!spec.quality) throw new Error('Выберите доступное качество');
+      identity = {source:'filmix', hash:'', filmixId:spec.id, fileId:file.id, fileName:file.path, title:file.path.split('/').pop(), torrentTitle:post.title, link:'filmix:' + spec.id, voice:file.voice, season:file.season, quality:spec.quality};
+      return downloads.add(spec, identity);
+    });
+  }
+  spec = {source:'torrent', hash:core.hash(b.hash), fileId:Number(b.fileId)};
+  return tsJSON('/torrents', {action:'get', hash:spec.hash}).then(function (torrent) {
+    var file = core.files(torrent).find(function (file) { return file.id === spec.fileId; });
+    if (!file) throw new Error('Видео не найдено');
+    identity = {hash:spec.hash, fileId:file.id, fileName:file.path, title:file.path.split('/').pop(), torrentTitle:torrent.title || torrent.name || '', link:'magnet:?xt=urn:btih:' + spec.hash};
+    return downloads.add(spec, identity);
+  });
+}
 var imageCache={},imageBytes=0;
 function request(base, endpoint, data, auth, timeout) {
   return new Promise(function (resolve, reject) {
@@ -149,6 +178,13 @@ var server = http.createServer(function (req, res) {
   if (route === '/api/session' && req.method === 'GET') return json(res, 200, { token: token });
   if (route.indexOf('/api/') === 0 && req.headers['x-app-token'] !== token) return json(res, 403, { code: 'SESSION_EXPIRED', error: 'Сессия устарела. Откройте приложение заново.' });
   Promise.resolve().then(function () {
+    if (route === '/api/downloads' && req.method === 'GET') return {items:downloads.list()};
+    if (route === '/api/downloads/save' && req.method === 'POST') return body(req).then(saveDownload);
+    if (route === '/api/downloads/remove' && req.method === 'POST') return body(req).then(function (b) { return downloads.remove(b.id); });
+    if (route === '/api/downloads/retry' && req.method === 'POST') return body(req).then(function (b) { return downloads.retry(b.id); });
+    if (route.indexOf('/download-media/') === 0 && ['GET','HEAD'].indexOf(req.method) >= 0) {
+      var parts = route.split('/'); downloads.serve(req, res, parts[2], parts[3]); return null;
+    }
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) {
       var next = validateConfig(b);

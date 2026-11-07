@@ -21,6 +21,7 @@ import { APIClient } from '../app/services/api';
 import * as watchHistory from '../app/services/history';
 import type {
   Config,
+  DownloadItem,
   FilesRequest,
   FilmixResult,
   MediaFile,
@@ -36,6 +37,7 @@ const titles: Record<View, string> = {
   catalog: 'Каталог',
   search: 'Что посмотрим?',
   history: 'История просмотров',
+  downloads: 'Скачанное',
   torrents: 'Торренты на сервере',
   settings: 'Настройки',
   magnet: 'Открыть торрент',
@@ -165,6 +167,7 @@ export class Globals {
       openSearch: action.bound,
       openTorrent: action.bound,
       resume: action.bound,
+      playDownload: action.bound,
       clearHistory: action.bound,
       returnToResults: action.bound,
       leaveFilmix: action.bound,
@@ -400,7 +403,45 @@ export class Globals {
     };
     this.change('files');
   }
+  playDownload(item: DownloadItem) {
+    if (item.state !== 'ready') return;
+    this.player?.stop();
+    const identity = item.identity;
+    this.source = identity.source === 'filmix' ? 'filmix' : 'torrent';
+    this.hash = identity.hash;
+    this.filmixId = identity.filmixId || 0;
+    this.torrent = { title: identity.torrentTitle };
+    this.originalLink = identity.link;
+    const file = {
+      id: identity.fileId,
+      path: identity.fileName,
+      length: item.total,
+    };
+    this.files = [file];
+    const previous = this.watchedFile(file);
+    this.player?.play(
+      file,
+      previous && !previous.completed ? previous.position : 0,
+      item,
+    );
+  }
   resume(item: HistoryItem) {
+    if (item.downloadId) {
+      this.api<{ items: DownloadItem[] }>('downloads', null, (error, data) => {
+        const saved =
+          !error &&
+          data.items.find(
+            (entry) => entry.id === item.downloadId && entry.state === 'ready',
+          );
+        if (saved) this.playDownload(saved);
+        else
+          this.toast(
+            error?.message ||
+              'Скачанное видео удалено. Откройте его заново через поиск.',
+          );
+      });
+      return;
+    }
     if (item.source === 'filmix') {
       this.filmixOrigin = 'search';
       this.openFilmix(item.filmixId!, item.torrentTitle, item);

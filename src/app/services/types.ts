@@ -7,6 +7,7 @@ export type View =
   | 'catalog'
   | 'search'
   | 'history'
+  | 'downloads'
   | 'torrents'
   | 'settings'
   | 'magnet'
@@ -76,3 +77,14 @@ export type SavedHistory = HistoryItem & { completed?: boolean };
 export type FilesRequest =
   | { source: 'torrent'; link: string; title: string; resume?: HistoryItem }
   | { source: 'filmix'; id: number; title: string; resume?: HistoryItem };
+
+export interface DownloadItem {
+  id: string;
+  identity: Omit<SavedHistory, 'position' | 'duration' | 'updated'>;
+  state: 'queued' | 'downloading' | 'ready' | 'error';
+  received: number;
+  total: number;
+  created: number;
+  error: string;
+  url: string;
+}

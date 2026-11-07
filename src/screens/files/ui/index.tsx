@@ -139,39 +139,59 @@ export const Files = withViewModel(FilesVM, ({ model }) => {
         </p>
         <For each={model.globals.files}>
           {(file, index) => (
-            <button class="torrent file-card" onClick={() => model.play(file)}>
-              <span class="torrent-number">
-                {String(index() + 1).padStart(2, '0')}
-              </span>
-              <span class="torrent-body">
-                <span class="torrent-title">{file.path}</span>
-                <span class="torrent-meta">
-                  <span>
-                    {model.globals.source === 'filmix'
-                      ? file.voice + ' · ' + file.qualities?.join(' / ') + 'p'
-                      : model.globals.bytes(file.length)}
+            <div class="download-file-row">
+              <button
+                class="torrent file-card"
+                onClick={() => model.play(file)}
+              >
+                <span class="torrent-number">
+                  {String(index() + 1).padStart(2, '0')}
+                </span>
+                <span class="torrent-body">
+                  <span class="torrent-title">{file.path}</span>
+                  <span class="torrent-meta">
+                    <span>
+                      {model.globals.source === 'filmix'
+                        ? file.voice + ' · ' + file.qualities?.join(' / ') + 'p'
+                        : model.globals.bytes(file.length)}
+                    </span>
                   </span>
                 </span>
-              </span>
-              <span class="torrent-arrow">→</span>
-              <span
-                class="file-watch-track"
-                role="img"
-                aria-label={
-                  model.globals.fileProgress(file) >= 100
-                    ? 'Просмотрено'
-                    : 'Просмотрено ' +
-                      Math.floor(model.globals.fileProgress(file)) +
-                      '%'
-                }
-              >
+                <span class="torrent-arrow">→</span>
                 <span
-                  class="file-watch-fill"
-                  data-file-id={file.id}
-                  style={{ width: model.globals.fileProgress(file) + '%' }}
-                />
-              </span>
-            </button>
+                  class="file-watch-track"
+                  role="img"
+                  aria-label={
+                    model.globals.fileProgress(file) >= 100
+                      ? 'Просмотрено'
+                      : 'Просмотрено ' +
+                        Math.floor(model.globals.fileProgress(file)) +
+                        '%'
+                  }
+                >
+                  <span
+                    class="file-watch-fill"
+                    data-file-id={file.id}
+                    style={{ width: model.globals.fileProgress(file) + '%' }}
+                  />
+                </span>
+              </button>
+              <button
+                class="btn save-video"
+                disabled={
+                  model.saving.includes(file.id) ||
+                  model.saved.includes(file.id)
+                }
+                onClick={() => model.save(file)}
+                aria-label={'Сохранить ' + file.path}
+              >
+                {model.saving.includes(file.id)
+                  ? 'Добавляем…'
+                  : model.saved.includes(file.id)
+                    ? 'В скачанном'
+                    : '↓ Сохранить'}
+              </button>
+            </div>
           )}
         </For>
       </Show>

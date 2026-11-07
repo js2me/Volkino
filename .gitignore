@@ -29,3 +29,6 @@ android/app/src/main/res/drawable/icon.png
 *.jks
 android/release-signing.json
 android/build/
+
+# Offline video library
+/downloads/

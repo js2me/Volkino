@@ -50,6 +50,8 @@ export function createMockMiddleware() {
   };
   let localState = 'stopped';
   let currentTorrent = torrent();
+  let downloads = [];
+  let nextDownloadId = 0;
 
   return async (req, res, next) => {
     const url = new URL(req.url, 'http://localhost');
@@ -117,6 +119,22 @@ export function createMockMiddleware() {
         case '/api/torrents': return json(res, empty ? [] : [currentTorrent]);
         case '/api/add': currentTorrent = torrent(body.title || 'Торрент по ссылке'); return json(res, currentTorrent);
         case '/api/status': return json(res, { torrent: currentTorrent, files });
+        case '/api/downloads': return json(res, { items: downloads });
+        case '/api/downloads/save': {
+          const file = body.source === 'filmix' ? filmixPost(body.id).files.find(file => file.id === body.fileId) : files.find(file => file.id === body.fileId);
+          if (!file) return json(res, { error: 'Видео не найдено' }, 400);
+          const identity = { hash: currentTorrent.hash, fileId: file.id, fileName: file.path, title: file.path.split('/').pop(), torrentTitle: currentTorrent.title, link: 'magnet:?xt=urn:btih:' + currentTorrent.hash,
+            ...(body.source === 'filmix' ? { source: 'filmix', hash: '', filmixId: body.id, link: 'filmix:' + body.id, voice: file.voice, season: file.season, quality: body.quality } : {}) };
+          let item = downloads.find(item => item.identity.link === identity.link && item.identity.fileId === identity.fileId);
+          if (!item) {
+            const { size } = await stat(video);
+            item = { id: String(++nextDownloadId), identity, state: 'ready', received: size, total: size, created: Date.now(), error: '', url: '/mock/video.mp4' };
+            downloads.unshift(item);
+          }
+          return json(res, item);
+        }
+        case '/api/downloads/remove': downloads = downloads.filter(item => item.id !== body.id); return json(res, { ok: true });
+        case '/api/downloads/retry': return json(res, downloads.find(item => item.id === body.id));
         case '/api/preload': return json(res, { stat: 3 });
         case '/api/enable-search': return json(res, { message: 'Демонстрационный поиск включён' });
         case '/api/local-server': return json(res, { state: localState, version: 'MatriX.mock' });
