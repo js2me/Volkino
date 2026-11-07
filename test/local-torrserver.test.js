@@ -16,6 +16,7 @@ function fixture(dir){
 const fs=require('fs'),http=require('http'),path=require('path');
 const args=process.argv;const data=args[args.indexOf('--path')+1];
 fs.writeFileSync(path.join(data,'pid'),String(process.pid));
+fs.writeFileSync(path.join(data,'memory-limit'),process.env.GOMEMLIMIT||'');
 fs.appendFileSync(path.join(data,'pids'),process.pid+'\\n');
 http.createServer((req,res)=>{
  if(req.headers.authorization){res.writeHead(401);return res.end('credentials leaked');}
@@ -52,12 +53,34 @@ test('managed local server switches proxy, preserves external secrets, autostart
     assert.equal((await api('health')).version,'MatriX.fixture');
     const stream=await request(base+'/stream?hash=0123456789abcdef0123456789abcdef01234567&index=1',{headers:{Range:'bytes=0-3'}});assert.equal(stream.status,206);assert.equal(await stream.text(),'DATA');
     const settings=JSON.parse(fs.readFileSync(path.join(dir,'torrserver/data/settings.json'))).BitTorr;assert.equal(settings.CacheSize,32*1024*1024);assert.equal(settings.UseDisk,false);
+    const dataDir=path.join(dir,'torrserver/data');
+    const firstPid=Number(fs.readFileSync(path.join(dataDir,'pid')));
+    const custom={localCacheSize:128,localPreloadCache:25,localConnectionsLimit:40};
+    await api('config',custom);
+    assert.notEqual(Number(fs.readFileSync(path.join(dataDir,'pid'))),firstPid);
+    function checkSettings(){
+      const actual=JSON.parse(fs.readFileSync(path.join(dataDir,'settings.json'))).BitTorr;
+      assert.equal(actual.CacheSize,128*1024*1024);assert.equal(actual.PreloadCache,25);assert.equal(actual.ConnectionsLimit,40);
+      assert.equal(fs.readFileSync(path.join(dataDir,'memory-limit'),'utf8'),'192MiB');
+    }
+    checkSettings();
+    const configuredPid=Number(fs.readFileSync(path.join(dataDir,'pid')));
+    await api('config',custom);assert.equal(Number(fs.readFileSync(path.join(dataDir,'pid'))),configuredPid);
+    for(const invalid of [{localCacheSize:0},{localCacheSize:2049},{localCacheSize:'64'},{localCacheSize:32.5},{localPreloadCache:101},{localConnectionsLimit:-1}]){
+      const response=await request(base+'/api/config',{method:'POST',headers:{'X-App-Token':token,'Content-Type':'application/json'},body:JSON.stringify(invalid)});
+      assert.equal(response.status,400);assert.ok((await response.json()).error);
+      assert.equal(Number(fs.readFileSync(path.join(dataDir,'pid'))),configuredPid);
+    }
+    assert.equal((await api('config')).localCacheSize,128);
     const pid=Number(fs.readFileSync(path.join(dir,'torrserver/data/pid')));
     await close();await until(()=>{try{process.kill(pid,0);return false;}catch(_){return true;}});
     await launch();await until(async()=>(await api('local-server')).state==='running');assert.equal((await api('health')).version,'MatriX.fixture');
+    checkSettings();
     await api('local-server/stop',{});assert.equal((await api('local-server')).state,'stopped');assert.equal((await api('config')).torrserverMode,'external');
     assert.equal(JSON.parse(fs.readFileSync(cfg)).torrserverPassword,'secret');
-    await api('config',{torrserverMode:'local'});assert.equal((await api('health')).version,'MatriX.fixture');
+    await api('config',{localCacheSize:64});assert.equal((await api('local-server')).state,'stopped');
+    await api('config',{torrserverMode:'local'});
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir,'settings.json'))).BitTorr.CacheSize,64*1024*1024);assert.equal((await api('health')).version,'MatriX.fixture');
     await api('config',{torrserverMode:'external'});assert.equal((await api('local-server')).state,'stopped');
   }finally{await close();fs.rmSync(dir,{recursive:true,force:true});}
 });

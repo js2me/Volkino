@@ -89,12 +89,14 @@ function create(options) {
       // Apply memory limits before startup; /settings set restarts the torrent engine.
       var settingsFile = path.join(dataDir, 'settings.json'), settings = {};
       try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-      settings.BitTorr = Object.assign({ReaderReadAHead: 95, PreloadCache: 50, RetrackersMode: 1, TorrentDisconnectTimeout: 30, ResponsiveMode: true, StoreSettingsInJson: true}, settings.BitTorr, {CacheSize: 32 * 1024 * 1024, ConnectionsLimit: 20, UseDisk: false, DisableUPNP: true, EnableDLNA: false, EnableBonjour: false, EnableLPD: false});
+      var configured = options.getSettings ? options.getSettings() : {};
+      var cacheMiB = configured.localCacheSize || 32;
+      settings.BitTorr = Object.assign({ReaderReadAHead: 95, PreloadCache: 50, RetrackersMode: 1, TorrentDisconnectTimeout: 30, ResponsiveMode: true, StoreSettingsInJson: true}, settings.BitTorr, {CacheSize: cacheMiB * 1024 * 1024, PreloadCache: configured.localPreloadCache || 50, ConnectionsLimit: configured.localConnectionsLimit || 20, UseDisk: false, DisableUPNP: true, EnableDLNA: false, EnableBonjour: false, EnableLPD: false});
       fs.writeFileSync(settingsFile + '.tmp', JSON.stringify(settings), {mode: 384}); fs.renameSync(settingsFile + '.tmp', settingsFile);
       var log = path.join(dir, 'torrserver.log'); if (fs.existsSync(log) && fs.statSync(log).size > 1024 * 1024) fs.renameSync(log, log + '.old');
       var fd = fs.openSync(log, 'a', 384);
       phase = 'starting'; error = '';
-      var current = child = cp.spawn(binary, ['--ip', '127.0.0.1', '--port', String(port), '--path', dataDir], {stdio: ['ignore', fd, fd], env: Object.assign({}, process.env, {GOMEMLIMIT: '96MiB', GOGC: '50'})}); fs.closeSync(fd);
+      var current = child = cp.spawn(binary, ['--ip', '127.0.0.1', '--port', String(port), '--path', dataDir], {stdio: ['ignore', fd, fd], env: Object.assign({}, process.env, {GOMEMLIMIT: String(cacheMiB + 64) + 'MiB', GOGC: '50'})}); fs.closeSync(fd);
       current.on('error', function (e) { if (child !== current) return; error = e.message; phase = 'error'; child = null; });
       current.on('exit', function (code, signal) { if (child === current) child = null; if (phase !== 'stopped' && !stopping) { phase = 'error'; error = 'TorrServer завершился (' + (signal || code) + '). См. ' + log; } });
       var deadline = Date.now() + 15000;

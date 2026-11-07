@@ -11,6 +11,8 @@ export const Settings = withViewModel(SettingsVM, ({ model }) => {
     key: keyof SettingsVM['draft'],
     type = 'text',
     placeholder = '',
+    min = 1,
+    max = 3600,
   ) => (
     <Field id={id} label={label}>
       <input
@@ -28,8 +30,8 @@ export const Settings = withViewModel(SettingsVM, ({ model }) => {
               : event.currentTarget.value,
           )
         }
-        min={type === 'number' ? 1 : undefined}
-        max={type === 'number' ? 3600 : undefined}
+        min={type === 'number' ? min : undefined}
+        max={type === 'number' ? max : undefined}
         step={type === 'number' ? 1 : undefined}
       />
     </Field>
@@ -69,6 +71,38 @@ export const Settings = withViewModel(SettingsVM, ({ model }) => {
           display: model.draft.torrserverMode === 'local' ? 'block' : 'none',
         }}
       >
+        {input(
+          'local-cache-size',
+          'Размер кэша в памяти (МиБ)',
+          'localCacheSize',
+          'number',
+          '',
+          8,
+          2048,
+        )}
+        {input(
+          'local-preload-cache',
+          'Предзагрузка кэша (%)',
+          'localPreloadCache',
+          'number',
+          '',
+          1,
+          100,
+        )}
+        {input(
+          'local-connections-limit',
+          'Лимит соединений',
+          'localConnectionsLimit',
+          'number',
+          '',
+          1,
+          500,
+        )}
+        <p class="muted">
+          Нажмите «Сохранить», чтобы применить параметры. Работающий сервер
+          перезапустится, воспроизведение прервётся. Больший кэш требует больше
+          оперативной памяти; предзагрузка задаёт долю кэша до начала просмотра.
+        </p>
         <p id="local-server-status" class="muted">
           {model.localStatus}
         </p>
@@ -80,8 +114,8 @@ export const Settings = withViewModel(SettingsVM, ({ model }) => {
         </button>
         <p class="muted">
           {model.android
-            ? 'TorrServer включён в APK. Кэш видео — 32 МиБ в памяти. Сервер останавливается при выходе из приложения кнопкой «Назад».'
-            : 'При первой установке нужен интернет: TorrServer загружается с GitHub. Кэш видео — 32 МиБ в памяти. Локальный режим запускается вместе с помощником, даже если окно приложения закрыто.'}
+            ? 'TorrServer включён в APK. Сервер останавливается при выходе из приложения кнопкой «Назад».'
+            : 'При первой установке нужен интернет: TorrServer загружается с GitHub. Локальный режим запускается вместе с помощником, даже если окно приложения закрыто.'}
         </p>
       </div>
       <div

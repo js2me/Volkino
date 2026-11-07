@@ -8,6 +8,8 @@ if (!fs.existsSync(path.join(APP, 'index.html'))) APP = path.resolve(__dirname, 
 var CONFIG = process.env.TW_CONFIG || path.resolve(__dirname, '../config.json');
 var defaults = { seekStep: 30, audioFix: 'off', torrserverMode: 'local', torrserverUrl: '', torrserverUsername: '', torrserverPassword: '', searchProvider: 'vilkadb', catalogProvider:'vilkadb', jacredUrl: '', jacredApiKey: '', filmixApiUrl: filmixModule.defaultApi, filmixSiteUrl: filmixModule.defaultSite, filmixToken: '', filmixDeviceId: '' };
 Object.assign(defaults,{filmixTransport:'mobile',filmixWebHash:'',filmixWebAccessToken:'',filmixWebRefreshToken:'',filmixWebUserAgent:''});
+var localSettingRanges = {localCacheSize: [32, 8, 2048, 'Размер кэша (МиБ)'], localPreloadCache: [50, 1, 100, 'Предзагрузка (%)'], localConnectionsLimit: [20, 1, 500, 'Лимит соединений']};
+Object.keys(localSettingRanges).forEach(function (key) { defaults[key] = localSettingRanges[key][0]; });
 var config=Object.assign({},defaults);
 var savedConfig = {};
 try { savedConfig = JSON.parse(fs.readFileSync(CONFIG, 'utf8')) || {}; config = Object.assign(config, savedConfig); } catch (e) { if (e.code !== 'ENOENT') console.error('Cannot load config:', e.message); }
@@ -17,7 +19,8 @@ if (!validSeekStep(config.seekStep)) config.seekStep=30;
 if (['off','moderate','night'].indexOf(config.audioFix)<0) config.audioFix='off';
 if (['vilkadb','cub','filmix','cinemeta','yts'].indexOf(config.catalogProvider)<0) config.catalogProvider='vilkadb';
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
-var localTS = require('./local-torrserver').create({directory: path.dirname(CONFIG), port: process.env.TW_TORRSERVER_PORT});
+Object.keys(localSettingRanges).forEach(function (key) { if (!validLocalSetting(key, config[key])) config[key] = defaults[key]; });
+var localTS = require('./local-torrserver').create({directory: path.dirname(CONFIG), port: process.env.TW_TORRSERVER_PORT, getSettings: function () { return config; }});
 function tsBase() { return config.torrserverMode === 'local' ? localTS.base : config.torrserverUrl; }
 function tsAuth() { return config.torrserverMode === 'local' ? null : {username: config.torrserverUsername, password: config.torrserverPassword}; }
 var token = crypto.randomBytes(24).toString('hex');
@@ -58,8 +61,15 @@ function body(req) {
 }
 function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; delete out.filmixToken; delete out.filmixDeviceId; delete out.filmixWebHash; delete out.filmixWebAccessToken; delete out.filmixWebRefreshToken; out.hasFilmixToken=config.filmixTransport==='web'?!!config.filmixWebAccessToken:!!config.filmixToken; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
 function validSeekStep(value) { return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= 1 && value <= 3600; }
+function validLocalSetting(key, value) { var range = localSettingRanges[key]; return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= range[1] && value <= range[2]; }
 function validateConfig(data) {
   var next = Object.assign({}, config);
+  Object.keys(localSettingRanges).forEach(function (key) {
+    if (data[key] === undefined) return;
+    var range = localSettingRanges[key];
+    if (!validLocalSetting(key, data[key])) throw new Error(range[3] + ': введите целое число от ' + range[1] + ' до ' + range[2]);
+    next[key] = data[key];
+  });
   if (data.seekStep !== undefined) {
     if (!validSeekStep(data.seekStep)) throw new Error('Шаг перемотки должен быть целым числом от 1 до 3600 секунд');
     next.seekStep = data.seekStep;
@@ -141,11 +151,19 @@ var server = http.createServer(function (req, res) {
   Promise.resolve().then(function () {
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) {
-      if (localTS.busy()&&b.torrserverMode==='local'&&config.torrserverMode!=='local') throw new Error('Дождитесь установки или запуска TorrServer');
-      var local = (b.torrserverMode || config.torrserverMode) === 'local';
-      // Validate before changing process state.
-      validateConfig(b);
-      return (b.torrserverMode===undefined||b.torrserverMode===config.torrserverMode?Promise.resolve():local ? localTS.start().catch(function (e) { return localTS.stop().then(function () { throw e; }); }) : localTS.stop()).then(function () { saveConfig(b); return publicConfig(); });
+      var next = validateConfig(b);
+      var changed = Object.keys(localSettingRanges).some(function (key) { return next[key] !== config[key]; });
+      var switching = next.torrserverMode !== config.torrserverMode;
+      if (localTS.busy() && (changed || switching)) throw new Error('Дождитесь установки или запуска TorrServer');
+      var restart = changed && config.torrserverMode === 'local' && localTS.status().state === 'running';
+      var previous = config;
+      return (switching || restart ? localTS.stop() : Promise.resolve()).then(function () {
+        saveConfig(b);
+        if (next.torrserverMode !== 'local' || !(switching || restart)) return publicConfig();
+        return localTS.start().then(publicConfig, function (e) {
+          return localTS.stop().then(function () { saveConfig(previous); if (previous.torrserverMode === 'local') localTS.run(false); throw e; });
+        });
+      });
     });
     if (route === '/api/local-server' && req.method === 'GET') return localTS.status();
     if (route === '/api/local-server/start' && req.method === 'POST') { saveConfig({torrserverMode: 'local'}); return localTS.run(true); }

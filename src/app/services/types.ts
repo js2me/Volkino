@@ -17,6 +17,9 @@ export interface Config {
   seekStep?: number;
   audioFix?: AudioFixMode;
   torrserverMode?: string;
+  localCacheSize?: number;
+  localPreloadCache?: number;
+  localConnectionsLimit?: number;
   torrserverUrl?: string;
   torrserverUsername?: string;
   hasPassword?: boolean;

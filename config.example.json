@@ -1,5 +1,8 @@
 {
   "torrserverMode": "local",
+  "localCacheSize": 32,
+  "localPreloadCache": 50,
+  "localConnectionsLimit": 20,
   "torrserverUrl": "",
   "torrserverUsername": "",
   "torrserverPassword": "",

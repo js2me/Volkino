@@ -30,6 +30,9 @@ export class SettingsVM extends VM {
       ...this.globals.config,
       seekStep: this.globals.player?.step || 30,
       torrserverMode: this.globals.config.torrserverMode || 'local',
+      localCacheSize: this.globals.config.localCacheSize ?? 32,
+      localPreloadCache: this.globals.config.localPreloadCache ?? 50,
+      localConnectionsLimit: this.globals.config.localConnectionsLimit ?? 20,
     };
     this.filmixStatus = this.globals.config.hasFilmixToken
       ? this.globals.config.filmixTransport === 'web'
@@ -90,6 +93,29 @@ export class SettingsVM extends VM {
       this.root?.querySelector<HTMLElement>('#seek-step')?.focus();
       return;
     }
+    for (const [key, min, max, label, id] of [
+      ['localCacheSize', 8, 2048, 'Размер кэша (МиБ)', 'local-cache-size'],
+      ['localPreloadCache', 1, 100, 'Предзагрузка (%)', 'local-preload-cache'],
+      [
+        'localConnectionsLimit',
+        1,
+        500,
+        'Лимит соединений',
+        'local-connections-limit',
+      ],
+    ] as const) {
+      const value = this.draft[key];
+      if (
+        typeof value !== 'number' ||
+        !Number.isInteger(value) ||
+        value < min ||
+        value > max
+      ) {
+        this.globals.toast(`${label}: введите целое число от ${min} до ${max}`);
+        this.root?.querySelector<HTMLElement>('#' + id)?.focus();
+        return;
+      }
+    }
     const data: Record<string, unknown> = {
       seekStep: step,
       audioFix:
@@ -99,6 +125,9 @@ export class SettingsVM extends VM {
       filmixApiUrl: this.draft.filmixApiUrl,
       filmixSiteUrl: this.draft.filmixSiteUrl,
       torrserverMode: this.draft.torrserverMode,
+      localCacheSize: this.draft.localCacheSize,
+      localPreloadCache: this.draft.localPreloadCache,
+      localConnectionsLimit: this.draft.localConnectionsLimit,
       torrserverUrl: this.draft.torrserverUrl,
       torrserverUsername: this.draft.torrserverUsername,
       searchProvider: this.draft.searchProvider,
