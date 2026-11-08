@@ -33,6 +33,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: android
+            build: build:android
+          - artifact: android6
+            build: build:android6
     env:
       ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -68,20 +76,36 @@ jobs:
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
           echo "VOLKINO_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-      - run: npm run build:android:release
-      - run: npm run build:android
+      - run: npm run ${{ matrix.build }}:release
+      - run: npm run ${{ matrix.build }}
       - name: Verify APK signatures
         shell: bash
         run: |
           for apk in dist/*.apk; do
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
           done
+      - name: Enable KVM for Android 6 runtime check
+        if: matrix.artifact == 'android6'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Check Node.js and TorrServer on Android 6
+        if: matrix.artifact == 'android6'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 23
+          target: default
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none
+          script: node scripts/android-smoke.mjs dist/*_android6-debug.apk
       - name: Remove signing key
         if: always()
         run: rm -f "$ANDROID_KEYSTORE_PATH"
       - uses: actions/upload-artifact@v4
         with:
-          name: android
+          name: ${{ matrix.artifact }}
           path: dist/*.apk
           if-no-files-found: error
 

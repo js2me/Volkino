@@ -17,7 +17,9 @@
     "dev": "vite",
     "dev:mock": "vite",
     "build:android": "npm run build:ui && node scripts/android.mjs",
-    "build:android:release": "npm run build:ui && node scripts/android.mjs --release"
+    "build:android:release": "npm run build:ui && node scripts/android.mjs --release",
+    "build:android6": "npm run build:ui && node scripts/android.mjs --android6",
+    "build:android6:release": "npm run build:ui && node scripts/android.mjs --android6 --release"
   },
   "engines": {
     "node": ">=8.12"

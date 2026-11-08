@@ -1,0 +1,10 @@
+{
+  "node.zip": {
+    "url": "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/nodejs-mobile-v16.17.0/nodejs-mobile-v16.17.0-android.zip",
+    "sha256": "aedf0945ef541635171943cf1d9ff008294b0e00de9be76edb2d8b035d8a8321"
+  },
+  "NODE-LICENSE": {
+    "url": "https://raw.githubusercontent.com/nodejs-mobile/nodejs-mobile/nodejs-mobile-v16.17.0/LICENSE",
+    "sha256": "69090e865afa7c62715b97f0712632d2923bd7a5faba91f94e4e75a2f9219d5e"
+  }
+}

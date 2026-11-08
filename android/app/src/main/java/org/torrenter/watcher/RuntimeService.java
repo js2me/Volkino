@@ -9,7 +9,6 @@ import java.util.zip.*;
 
 /** Separate process: Node may start only once, and is stopped when the UI unbinds. */
 public final class RuntimeService extends Service {
-    static { System.loadLibrary("node"); System.loadLibrary("volkino"); }
     private static native int startNode(String root, String config, String binary, int port);
     private volatile int port;
     private volatile String error;
@@ -25,6 +24,9 @@ public final class RuntimeService extends Service {
         super.onCreate();
         new Thread(() -> {
             try {
+                // Report linker errors to the Activity instead of crashing before binding.
+                System.loadLibrary("node");
+                System.loadLibrary("volkino");
                 File root = new File(getFilesDir(), "runtime");
                 unpack(root);
                 int selected;
@@ -37,7 +39,7 @@ public final class RuntimeService extends Service {
                 int code = startNode(root.getAbsolutePath(), new File(getFilesDir(), "config.json").getAbsolutePath(),
                     getApplicationInfo().nativeLibraryDir + "/libtorrserver.so", selected);
                 error = "Помощник завершился (" + code + ")"; port = 0;
-            } catch (Exception e) { error = e.toString(); port = 0; }
+            } catch (UnsatisfiedLinkError | Exception e) { error = e.toString(); port = 0; }
         }, "volkino-node").start();
     }
     private void unpack(File root) throws IOException {

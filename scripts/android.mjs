@@ -6,9 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const android = path.join(root, 'android');
-const vendor = path.join(android, 'vendor');
+const legacy = process.argv.includes('--android6');
+const flavor = legacy ? 'android6' : 'modern';
+const nodeVersion = legacy ? '16.17.0' : '18.20.4';
+const nodeTag = legacy ? `nodejs-mobile-v${nodeVersion}` : `v${nodeVersion}`;
+const vendor = path.join(android, 'vendor', flavor);
 fs.mkdirSync(vendor, { recursive: true });
-const lock = JSON.parse(fs.readFileSync(path.join(android, 'vendor-lock.json')));
+const lock = {
+  ...JSON.parse(fs.readFileSync(path.join(android, 'vendor-lock.json'))),
+  ...(legacy ? JSON.parse(fs.readFileSync(path.join(android, 'vendor-lock-android6.json'))) : {}),
+};
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 for (const [name, info] of Object.entries(lock)) {
   const file = path.join(vendor, name);
@@ -21,9 +28,15 @@ for (const [name, info] of Object.entries(lock)) {
   fs.writeFileSync(file, data);
 }
 // Always extract from the verified archive, rather than trusting an old extracted tree.
-fs.rmSync(path.join(vendor, 'node'), { recursive: true, force: true });
-execFileSync('unzip', ['-q', path.join(vendor, 'node.zip'), '-d', path.join(vendor, 'node')]);
-const generated = path.join(android, 'app/build/generated');
+const nodeDir = path.join(android, 'vendor', legacy ? 'node-android6' : 'node');
+const extracted = path.join(vendor, 'extracted');
+fs.rmSync(extracted, { recursive: true, force: true });
+execFileSync('unzip', ['-q', path.join(vendor, 'node.zip'), '-d', extracted]);
+// v16 archives have an extra top-level directory; v18 archives do not.
+const archiveRoot = legacy ? path.join(extracted, `nodejs-mobile-v${nodeVersion}-android`) : extracted;
+fs.rmSync(nodeDir, { recursive: true, force: true });
+fs.renameSync(archiveRoot, nodeDir);
+const generated = path.join(android, 'app/build/generated', flavor);
 const assets = path.join(generated, 'assets');
 const staging = path.join(generated, 'runtime');
 fs.rmSync(staging, { recursive: true, force: true });
@@ -43,16 +56,17 @@ for (const [abi, arch] of Object.entries({ 'armeabi-v7a': 'arm7', 'arm64-v8a': '
 }
 for (const name of ['NODE-LICENSE', 'TORRSERVER-LICENSE']) fs.copyFileSync(path.join(vendor, name), path.join(assets, name));
 fs.copyFileSync(path.join(android, 'LIBVLC-LICENSE'), path.join(assets, 'LIBVLC-LICENSE'));
-fs.writeFileSync(path.join(assets, 'THIRD-PARTY-NOTICES.txt'), `VolKino includes Node.js Mobile v18.20.4 (MIT and third-party licenses, see NODE-LICENSE) and TorrServer MatriX.147.2 (GPL-3.0, see TORRSERVER-LICENSE).\nLibVLC Android 3.6.5 (LGPL-2.1, see LIBVLC-LICENSE). Source and build scripts: https://code.videolan.org/videolan/libvlcjni/-/tree/3.6.5\nSources: https://github.com/nodejs-mobile/nodejs-mobile/tree/v18.20.4\nhttps://github.com/YouROK/TorrServer/tree/MatriX.147.2\n`);
+fs.writeFileSync(path.join(assets, 'THIRD-PARTY-NOTICES.txt'), `VolKino includes Node.js Mobile v${nodeVersion} (MIT and third-party licenses, see NODE-LICENSE) and TorrServer MatriX.147.2 (GPL-3.0, see TORRSERVER-LICENSE).\nLibVLC Android 3.6.5 (LGPL-2.1, see LIBVLC-LICENSE). Source and build scripts: https://code.videolan.org/videolan/libvlcjni/-/tree/3.6.5\nSources: https://github.com/nodejs-mobile/nodejs-mobile/tree/${nodeTag}\nhttps://github.com/YouROK/TorrServer/tree/MatriX.147.2\n`);
 const drawable = path.join(android, 'app/src/main/res/drawable');
 fs.copyFileSync(path.join(root, 'app/icon-large.png'), path.join(drawable, 'icon.png'));
 if (process.argv.includes('--prepare')) { console.log('Android assets prepared'); process.exit(0); }
 const release = process.argv.includes('--release');
-execFileSync(path.join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'), [release ? 'assembleRelease' : 'assembleDebug', '--console=plain'], { cwd: android, stdio: 'inherit' });
+const variant = flavor[0].toUpperCase() + flavor.slice(1) + (release ? 'Release' : 'Debug');
+execFileSync(path.join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'), [`assemble${variant}`, '--console=plain'], { cwd: android, stdio: 'inherit' });
 const type = release ? 'release' : 'debug';
 const unsigned = release && !process.env.ANDROID_KEYSTORE_PATH;
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
-const dest = path.join(root, 'dist', `volkino_${pkg.version}_android-${type}${unsigned ? '-unsigned' : ''}.apk`);
+const dest = path.join(root, 'dist', `volkino_${pkg.version}_${legacy ? 'android6' : 'android'}-${type}${unsigned ? '-unsigned' : ''}.apk`);
 fs.mkdirSync(path.dirname(dest), { recursive: true });
-fs.copyFileSync(path.join(android, `app/build/outputs/apk/${type}/app-${type}${unsigned ? '-unsigned' : ''}.apk`), dest);
+fs.copyFileSync(path.join(android, `app/build/outputs/apk/${flavor}/${type}/app-${flavor}-${type}${unsigned ? '-unsigned' : ''}.apk`), dest);
 console.log(dest);

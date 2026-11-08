@@ -35,12 +35,19 @@ public final class MainActivity extends Activity {
     private WebView web;
     private TextView status;
     private Messenger runtime;
-    private boolean bound, loaded, destroyed;
+    private boolean bound, loaded, destroyed, startupFailed;
     private String origin;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private long deadline;
+    private String startupStage = "подключение к помощнику";
+    private final Runnable startupTimeout = () -> {
+        if (!destroyed && !loaded && !startupFailed) fail("Не удалось запустить VolKino за минуту: " + startupStage +
+            ".\nAndroid " + Build.VERSION.RELEASE + " · " + Build.SUPPORTED_ABIS[0] +
+            "\nЗакройте и откройте приложение. Если ошибка повторяется, передайте этот текст разработчику.");
+    };
     private final Messenger replies = new Messenger(new Handler(Looper.getMainLooper(), msg -> {
+        if (destroyed || startupFailed || loaded) return true;
         String error = msg.getData().getString("error");
         if (error != null) fail(error);
         else if (msg.arg1 > 0) probe(msg.arg1);
@@ -50,8 +57,14 @@ public final class MainActivity extends Activity {
     private final ServiceConnection connection = new ServiceConnection() {
         public void onServiceConnected(ComponentName name, IBinder binder) { runtime = new Messenger(binder); requestRuntime(); }
         public void onServiceDisconnected(ComponentName name) {
-            runtime = null; loaded = false; deadline = android.os.SystemClock.elapsedRealtime() + 60000;
-            fail("Перезапускаем помощник…");
+            runtime = null;
+            if (!loaded && !startupFailed) {
+                startupStage = "помощник отключился или аварийно завершился";
+                status.setText("Перезапускаем помощник…");
+            } else if (loaded) {
+                loaded = false;
+                fail("Помощник отключился. Закройте и откройте приложение.");
+            }
         }
     };
     private boolean isTV() { return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION; }
@@ -94,32 +107,43 @@ public final class MainActivity extends Activity {
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return !local(Uri.parse(url)); }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!local(Uri.parse(url))) return;
-                loaded = true; status.setVisibility(View.GONE);
-                String device = isTV() ? "tv" : "tablet";
-                web.evaluateJavascript("document.documentElement.setAttribute('data-device','" + device + "');document.querySelector('.version').textContent='Android " + (isTV() ? "TV" : "· планшет") + " · v" + BuildConfig.VERSION_NAME + "';" +
-                    (isTV() ? "document.querySelector('meta[name=viewport]').content='width=1280';" : ""), null);
-                web.requestFocus();
+                if (destroyed || startupFailed || !local(Uri.parse(url))) return;
+                web.evaluateJavascript("!!document.querySelector('.version')", ready -> {
+                    if (destroyed || startupFailed) return;
+                    if (!"true".equals(ready)) {
+                        fail("Не удалось запустить интерфейс. Обновите Android System WebView и откройте приложение снова.\nAndroid " + Build.VERSION.RELEASE);
+                        return;
+                    }
+                    loaded = true; status.setVisibility(View.GONE);
+                    handler.removeCallbacks(startupTimeout);
+                    String device = isTV() ? "tv" : "tablet";
+                    web.evaluateJavascript("document.documentElement.setAttribute('data-device','" + device + "');document.querySelector('.version').textContent='Android " + (isTV() ? "TV" : "· планшет") + " · v" + BuildConfig.VERSION_NAME + "';" +
+                        (isTV() ? "document.querySelector('meta[name=viewport]').content='width=1280';" : ""), null);
+                    web.requestFocus();
+                });
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) fail("Не удалось открыть интерфейс. Закройте и откройте приложение.");
             }
         });
         deadline = android.os.SystemClock.elapsedRealtime() + 60000;
+        // Independent of Binder replies and HTTP callbacks: either can stop arriving.
+        handler.postDelayed(startupTimeout, 60000);
         bound = bindService(new Intent(this, RuntimeService.class), connection, BIND_AUTO_CREATE);
         if (!bound) fail("Не удалось запустить помощник");
     }
     private boolean local(Uri url) { return origin != null && (origin.equals(url.toString()) || origin.equals(url.getScheme() + "://" + url.getAuthority())); }
-    private void fail(String text) { if (!destroyed) { status.setText(text); status.setVisibility(View.VISIBLE); } }
+    private void fail(String text) { if (!destroyed) { startupFailed = true; handler.removeCallbacks(startupTimeout); status.setText(text); status.setVisibility(View.VISIBLE); } }
     private void requestRuntime() {
-        if (destroyed || loaded) return;
-        if (android.os.SystemClock.elapsedRealtime() > deadline) { fail("Запуск занял больше минуты. Закройте и откройте приложение."); return; }
+        if (destroyed || loaded || startupFailed) return;
+        if (android.os.SystemClock.elapsedRealtime() >= deadline) { startupTimeout.run(); return; }
         if (runtime == null) return;
         Message request = Message.obtain(null, 1); request.replyTo = replies;
         try { runtime.send(request); } catch (RemoteException e) { fail(e.toString()); }
     }
     private void probe(int port) {
-        if (destroyed || loaded) return;
+        if (destroyed || loaded || startupFailed) return;
+        startupStage = "запуск локального HTTP-сервера";
         String address = "http://127.0.0.1:" + port;
         network.execute(() -> {
             boolean ready = false; HttpURLConnection request = null;
@@ -130,8 +154,8 @@ public final class MainActivity extends Activity {
             } catch (Exception ignored) { } finally { if (request != null) request.disconnect(); }
             final boolean ok = ready;
             handler.post(() -> {
-                if (destroyed) return;
-                if (ok) { origin = address; web.loadUrl(address + "/"); }
+                if (destroyed || loaded || startupFailed) return;
+                if (ok) { startupStage = "загрузка интерфейса WebView"; origin = address; web.loadUrl(address + "/"); }
                 else handler.postDelayed(this::requestRuntime, 300);
             });
         });
