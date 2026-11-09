@@ -35,7 +35,8 @@ public final class PlayerActivity extends Activity {
     private SeekBar timeline;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long resume, position, duration, lastPublish;
-    private boolean completed, seeking;
+    private boolean completed, seeking, viewsAttached;
+    private int restoreAudioTrack = -1;
     private int step;
     private AudioManager audio;
     private final AudioManager.OnAudioFocusChangeListener audioFocus = change -> {
@@ -85,9 +86,9 @@ public final class PlayerActivity extends Activity {
         controls.addView(bottomPanel, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
         LinearLayout buttons = row(bottomPanel);
         step = Math.max(1, Math.min(3600, getIntent().getIntExtra("step", 30)));
-        add(buttons, "Назад", this::finish);
+        if (isTV()) add(buttons, "Назад", this::finish);
         add(buttons, "−" + step + " сек", () -> seek(-step));
-        pause = add(buttons, "Пауза", this::toggle);
+        if (isTV()) pause = add(buttons, "Пауза", this::toggle);
         add(buttons, "+" + step + " сек", () -> seek(step));
         add(buttons, "Серии", this::openEpisodes);
         add(buttons, "Звук и изображение", this::openOptions);
@@ -103,7 +104,8 @@ public final class PlayerActivity extends Activity {
         root.addView(buffering, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
         setContentView(root);
         root.setOnClickListener(v -> {
-            if (controls.getVisibility() == View.VISIBLE) hideControls(); else showControls();
+            if (!isTV()) { toggle(); showControls(); }
+            else if (controls.getVisibility() == View.VISIBLE) hideControls(); else showControls();
         });
         try { episodes = new JSONArray(getIntent().getStringExtra("episodes")); } catch (Exception ignored) { }
         fitMode = getPreferences(MODE_PRIVATE).getInt("fitMode", 0);
@@ -125,12 +127,14 @@ public final class PlayerActivity extends Activity {
             vlc = new LibVLC(this, options); player = new MediaPlayer(vlc);
             player.setAudioDigitalOutputEnabled(false);
             player.attachViews(surface, null, false, false);
+            viewsAttached = true;
             applyFit();
             player.setEventListener(event -> {
                 if (resume > 0 && (event.type == MediaPlayer.Event.Playing || event.type == MediaPlayer.Event.SeekableChanged) && player.isSeekable()) { player.setTime(resume); resume = 0; }
                 if (event.type == MediaPlayer.Event.Playing) {
-                    pause.setText("Пауза"); status.setText(""); buffering.setVisibility(View.GONE); showControls();
-                } else if (event.type == MediaPlayer.Event.Paused) { pause.setText("Продолжить"); status.setText("Пауза"); showControls(); }
+                    if (restoreAudioTrack >= 0 && player.setAudioTrack(restoreAudioTrack)) restoreAudioTrack = -1;
+                    if (pause != null) pause.setText("Пауза"); status.setText(""); buffering.setVisibility(View.GONE); showControls();
+                } else if (event.type == MediaPlayer.Event.Paused) { if (pause != null) pause.setText("Продолжить"); status.setText("Пауза"); showControls(); }
                 else if (event.type == MediaPlayer.Event.Buffering) {
                     boolean waiting = event.getBuffering() < 100;
                     buffering.setVisibility(waiting ? View.VISIBLE : View.GONE);
@@ -145,9 +149,11 @@ public final class PlayerActivity extends Activity {
             media.setHWDecoderEnabled(true, false);
             media.addOption(":network-caching=1500");
             player.setMedia(media); media.release(); player.play();
-            handler.post(tick); pause.requestFocus(); showControls();
+            focusControls(); showControls();
         } catch (Exception | LinkageError e) { publish(true, "Не удалось запустить видеоплеер"); finish(); }
     }
+    private boolean isTV() { return (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION; }
+    private void focusControls() { if (pause != null) pause.requestFocus(); else timeline.requestFocus(); }
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); return layout; }
     private TextView label(String text, int size) {
@@ -216,7 +222,8 @@ public final class PlayerActivity extends Activity {
         add(cards, "Готово", () -> episodesPanel.setVisibility(View.GONE));
         episodesPanel.setVisibility(View.VISIBLE); showControls();
     }
-    private void toggle() { if (player != null) { if (player.isPlaying()) player.pause(); else player.play(); } }
+    private void toggle() { if (player != null) { if (player.isPlaying()) player.pause(); else play(); } }
+    private void play() { if (player != null && viewsAttached) player.play(); }
     private void seek(int seconds) {
         if (player != null && player.isSeekable()) player.setTime(Math.max(0, Math.min(Math.max(0, player.getLength()-1000), player.getTime() + seconds * 1000L)));
         showControls();
@@ -256,38 +263,66 @@ public final class PlayerActivity extends Activity {
         sendBroadcast(update);
     }
     @Override public void onBackPressed() {
-        if (panelOpen()) { optionsPanel.setVisibility(View.GONE); episodesPanel.setVisibility(View.GONE); showControls(); pause.requestFocus(); }
+        if (panelOpen()) { optionsPanel.setVisibility(View.GONE); episodesPanel.setVisibility(View.GONE); showControls(); focusControls(); }
         else finish();
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration config) {
         super.onConfigurationChanged(config); applyFit();
     }
     @Override public void finish() { publish(true, null); super.finish(); }
+    @Override protected void onStart() {
+        super.onStart();
+        if (player != null) {
+            if (!viewsAttached) {
+                player.attachViews(surface, null, false, false);
+                viewsAttached = true;
+                applyFit();
+                status.setText("Пауза");
+                buffering.setVisibility(View.GONE);
+                showControls();
+            }
+            handler.post(tick);
+        }
+    }
     @Override protected void onResume() {
         super.onResume(); audio.requestAudioFocus(audioFocus, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
     }
     @Override protected void onPause() { if (player != null) { player.pause(); publish(false, null); }
         audio.abandonAudioFocus(audioFocus); super.onPause(); }
+    @Override protected void onStop() {
+        handler.removeCallbacks(tick); handler.removeCallbacks(hide);
+        if (player != null && viewsAttached) {
+            // A locked screen destroys SurfaceView. Release the decoder before
+            // detaching so the next play cannot keep rendering into its old surface.
+            publish(false, null);
+            resume = position;
+            restoreAudioTrack = player.getAudioTrack();
+            player.stop();
+            player.detachViews();
+            viewsAttached = false;
+        }
+        super.onStop();
+    }
     @Override protected void onSaveInstanceState(Bundle state) { state.putLong("position", position); state.putInt("fitMode", fitMode); super.onSaveInstanceState(state); }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             int key = event.getKeyCode();
             if (key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { toggle(); return true; }
-            if (key == KeyEvent.KEYCODE_MEDIA_PLAY && player != null) { player.play(); return true; }
+            if (key == KeyEvent.KEYCODE_MEDIA_PLAY && player != null) { play(); return true; }
             if (key == KeyEvent.KEYCODE_MEDIA_PAUSE && player != null) { player.pause(); return true; }
             if (key == KeyEvent.KEYCODE_MEDIA_REWIND) { seek(-step); return true; }
             if (key == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) { seek(step); return true; }
             if (key == KeyEvent.KEYCODE_PROG_YELLOW) { cycleAudio(); return true; }
             if (!panelOpen() && key == KeyEvent.KEYCODE_DPAD_UP) { openOptions(); return true; }
             if (!panelOpen() && key == KeyEvent.KEYCODE_DPAD_DOWN) { openEpisodes(); return true; }
-            if (controls.getVisibility() != View.VISIBLE && key >= KeyEvent.KEYCODE_DPAD_UP && key <= KeyEvent.KEYCODE_DPAD_CENTER) { showControls(); pause.requestFocus(); return true; }
+            if (controls.getVisibility() != View.VISIBLE && key >= KeyEvent.KEYCODE_DPAD_UP && key <= KeyEvent.KEYCODE_DPAD_CENTER) { showControls(); focusControls(); return true; }
             if (key >= KeyEvent.KEYCODE_DPAD_UP && key <= KeyEvent.KEYCODE_DPAD_CENTER) showControls();
         }
         return super.dispatchKeyEvent(event);
     }
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        if (player != null) { player.setEventListener(null); player.stop(); player.detachViews(); player.release(); }
+        if (player != null) { player.setEventListener(null); player.stop(); if (viewsAttached) player.detachViews(); player.release(); }
         if (vlc != null) vlc.release(); super.onDestroy();
     }
 }
