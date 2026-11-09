@@ -69,4 +69,7 @@ def buildUi = tasks.register('buildVolkinoUi', Exec) {
     }
 }
 
-dependencies { implementation 'org.videolan.android:libvlc-all:3.6.5' }
+dependencies {
+    implementation 'org.videolan.android:libvlc-all:3.6.5'
+    implementation 'androidx.core:core:1.15.0'
+}

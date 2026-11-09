@@ -72,6 +72,8 @@ export function createMockMiddleware() {
         return json(res, { error: 'Демонстрационная ошибка сервиса. Измените ?mock=error на ?mock=normal.' }, 503);
       }
       switch (route) {
+        case '/api/updates': return json(res, {state:'idle', supported:false, current:'0.9.2', build:0, received:0, total:0, error:''});
+        case '/api/updates/check': return json(res, {state:'latest', supported:false, current:'0.9.2', build:0, received:0, total:0, error:''});
         case '/api/session': return json(res, { token: 'local-mock-session' });
         case '/api/config': {
           if (body.seekStep !== undefined && (!Number.isInteger(body.seekStep) || body.seekStep < 1 || body.seekStep > 3600)) return json(res, { error: 'Шаг перемотки должен быть целым числом от 1 до 3600 секунд' }, 400);

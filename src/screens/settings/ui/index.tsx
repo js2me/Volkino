@@ -43,6 +43,33 @@ export const Settings = withViewModel(SettingsVM, ({ model }) => {
         model.root = element;
       }}
     >
+      <h2>Обновление приложения</h2>
+      <p id="app-update-status" class="muted" role="status" aria-live="polite">
+        {model.updateMessage}
+      </p>
+      <button
+        id="app-update"
+        class="btn primary"
+        disabled={
+          model.updateBusy ||
+          ['checking', 'downloading', 'installing'].includes(
+            model.updateStatus?.state || '',
+          )
+        }
+        onClick={model.updateApp}
+      >
+        {model.updateStatus?.state === 'ready'
+          ? 'Установить'
+          : model.updateStatus?.state === 'available' &&
+              model.updateStatus.supported
+            ? 'Скачать обновление'
+            : 'Обновить'}
+      </button>
+      <p class="muted">
+        После установки или отмены установочный пакет удаляется. На Android
+        подтвердите установку в системном окне; при запросе разрешите установку
+        из этого источника.
+      </p>
       <AudioSettings payload={{ mode: model.draft.audioFix || 'off' }} />
       <p class="muted">
         Выберите TorrServer на этом устройстве или подключите внешний сервер.

@@ -2,6 +2,11 @@
 'use strict';
 var cp = require('child_process'), fs = require('fs'), http = require('http');
 var ipk = process.argv[2], ts = process.argv[3] || '';
+function cleanup() {
+  if (process.env.TW_UPDATE_CLEANUP !== '1') return;
+  [ipk, __filename].forEach(function (file) { try { fs.unlinkSync(file); } catch (_) {} });
+}
+process.on('exit', cleanup);
 if (!ipk || !fs.existsSync(ipk)) throw new Error('Pass the staged .ipk path');
 // A launch request can reuse the old live page, including cached JS/CSS.
 // Fully close our app before replacing it so the new version is actually loaded.
@@ -30,6 +35,7 @@ child.stdout.on('data', function(c) {
       }
       cp.execFileSync('cp',['/media/developer/apps/usr/palm/applications/org.torrenter.watcher/scripts/start-tv.sh','/var/lib/webosbrew/init.d/65-torrenter-watcher']);
       fs.chmodSync('/var/lib/webosbrew/init.d/65-torrenter-watcher',493);
+      cleanup();
       cp.execFileSync('/bin/sh',['/var/lib/webosbrew/init.d/65-torrenter-watcher','restart']);
       var tries=0;
       function check() {

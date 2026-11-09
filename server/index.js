@@ -21,6 +21,11 @@ if (['vilkadb','cub','filmix','cinemeta','yts'].indexOf(config.catalogProvider)<
 if (process.env.TORRSERVER_URL) config.torrserverUrl = core.validBase(process.env.TORRSERVER_URL);
 Object.keys(localSettingRanges).forEach(function (key) { if (!validLocalSetting(key, config[key])) config[key] = defaults[key]; });
 var localTS = require('./local-torrserver').create({directory: path.dirname(CONFIG), port: process.env.TW_TORRSERVER_PORT, getSettings: function () { return config; }});
+var buildInfo;
+try { buildInfo = JSON.parse(fs.readFileSync(path.join(__dirname, 'build-info.json'), 'utf8')); }
+catch (_) { buildInfo = {version:require('../package.json').version, build:0, platform:'browser'}; }
+if (fs.existsSync('/usr/bin/luna-send') && process.getuid && process.getuid() === 0) buildInfo.platform = 'webos';
+var updates = require('./updates').create({directory:path.join(path.dirname(CONFIG), 'updates'), current:buildInfo});
 function tsBase() { return config.torrserverMode === 'local' ? localTS.base : config.torrserverUrl; }
 function tsAuth() { return config.torrserverMode === 'local' ? null : {username: config.torrserverUsername, password: config.torrserverPassword}; }
 var token = crypto.randomBytes(24).toString('hex');
@@ -178,6 +183,10 @@ var server = http.createServer(function (req, res) {
   if (route === '/api/session' && req.method === 'GET') return json(res, 200, { token: token });
   if (route.indexOf('/api/') === 0 && req.headers['x-app-token'] !== token) return json(res, 403, { code: 'SESSION_EXPIRED', error: 'Сессия устарела. Откройте приложение заново.' });
   Promise.resolve().then(function () {
+    if (route === '/api/updates' && req.method === 'GET') return updates.status();
+    if (route === '/api/updates/check' && req.method === 'POST') return updates.check();
+    if (route === '/api/updates/download' && req.method === 'POST') return updates.download();
+    if (route === '/api/updates/install' && req.method === 'POST') return updates.install();
     if (route === '/api/downloads' && req.method === 'GET') return {items:downloads.list()};
     if (route === '/api/downloads/save' && req.method === 'POST') return body(req).then(saveDownload);
     if (route === '/api/downloads/remove' && req.method === 'POST') return body(req).then(function (b) { return downloads.remove(b.id); });

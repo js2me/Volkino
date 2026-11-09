@@ -14,6 +14,56 @@ import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
     static final String PLAYER_UPDATE = "org.torrenter.watcher.PLAYER_UPDATE";
+    private static final int UPDATE_PERMISSION = 701, UPDATE_INSTALL = 702;
+    private boolean waitingForUpdatePermission, updateInstallerOpen;
+    private java.io.File updateFile() { return new java.io.File(getFilesDir(), "updates/update.apk"); }
+    private void cleanUpdate() {
+        updateFile().delete();
+        new java.io.File(getFilesDir(), "updates/update.apk.part").delete();
+    }
+    private void installUpdate() {
+        if (waitingForUpdatePermission || updateInstallerOpen) return;
+        try {
+            java.io.File apk = updateFile();
+            if (!apk.isFile()) throw new Exception("Пакет удалён. Проверьте обновления и скачайте его снова.");
+            android.content.pm.PackageInfo info = getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+            long code = info == null ? 0 : (Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode);
+            if (info == null || !getPackageName().equals(info.packageName) || code <= BuildConfig.VERSION_CODE)
+                throw new Exception("APK не подходит для обновления этого приложения.");
+            if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+                waitingForUpdatePermission = true;
+                startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + getPackageName())), UPDATE_PERMISSION);
+                return;
+            }
+            Uri uri = androidx.core.content.FileProvider.getUriForFile(this, getPackageName() + ".updates", apk);
+            Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.putExtra(Intent.EXTRA_RETURN_RESULT, true);
+            updateInstallerOpen = true;
+            startActivityForResult(intent, UPDATE_INSTALL);
+        } catch (Exception e) {
+            waitingForUpdatePermission = false; updateInstallerOpen = false;
+            cleanUpdate();
+            Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+            refreshUpdateStatus();
+        }
+    }
+    private void refreshUpdateStatus() {
+        if (web != null && !destroyed && loaded) web.evaluateJavascript("window.dispatchEvent(new Event('volkino-update-finished'))", null);
+    }
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == UPDATE_PERMISSION && waitingForUpdatePermission) {
+            waitingForUpdatePermission = false;
+            if (Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls()) installUpdate();
+            else { cleanUpdate(); refreshUpdateStatus(); }
+        } else if (request == UPDATE_INSTALL) {
+            updateInstallerOpen = false;
+            cleanUpdate(); refreshUpdateStatus();
+        }
+    }
     private String playerToken;
     private final BroadcastReceiver playerUpdates = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent data) {
@@ -70,6 +120,7 @@ public final class MainActivity extends Activity {
     private boolean isTV() { return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION; }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        cleanUpdate();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         FrameLayout layout = new FrameLayout(this);
@@ -95,6 +146,14 @@ public final class MainActivity extends Activity {
                 });
             }
         }, "TWNativePlayer");
+        web.addJavascriptInterface(new Object() {
+            @JavascriptInterface public void install() {
+                handler.post(() -> {
+                    if (destroyed || !loaded || !local(Uri.parse(web.getUrl()))) return;
+                    installUpdate();
+                });
+            }
+        }, "TWNativeUpdater");
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true); settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);

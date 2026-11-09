@@ -3,6 +3,16 @@ import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../../shared/lib/mobx';
 import type { Config } from '../../../app/services/types';
 
+interface UpdateStatus {
+  state: string;
+  supported: boolean;
+  current: string;
+  build: number;
+  latest?: string;
+  received: number;
+  total: number;
+  error: string;
+}
 interface Account {
   code?: string;
   activationUrl?: string;
@@ -18,6 +28,9 @@ export class SettingsVM extends VM {
     filmixToken?: string;
     seekStep?: number;
   } = {};
+  updateStatus: UpdateStatus | null = null;
+  updateBusy = false;
+  private updateTimer?: ReturnType<typeof setTimeout>;
   login = '';
   password = '';
   filmixStatus = '';
@@ -42,6 +55,10 @@ export class SettingsVM extends VM {
         ? 'Войдите в аккаунт Filmix TV.'
         : 'Гостевой режим · до 480p';
     makeObservable(this, {
+      updateStatus: observable,
+      updateBusy: observable,
+      refreshUpdate: action.bound,
+      updateApp: action.bound,
       draft: observable,
       login: observable,
       password: observable,
@@ -57,11 +74,85 @@ export class SettingsVM extends VM {
   }
   protected didMount() {
     this.pollLocal();
+    this.refreshUpdate();
+    window.addEventListener('volkino-update-finished', this.refreshUpdate);
     this.afterRender(() => this.globals.focusFirst());
   }
   protected willUnmount() {
     clearTimeout(this.timer);
+    clearTimeout(this.updateTimer);
+    window.removeEventListener('volkino-update-finished', this.refreshUpdate);
     this.password = '';
+  }
+  refreshUpdate() {
+    this.updateRequest('', null);
+  }
+  private updateRequest(operation: string, body: object | null) {
+    clearTimeout(this.updateTimer);
+    this.updateBusy = true;
+    this.globals.api<UpdateStatus>(
+      'updates' + operation,
+      body,
+      (error, data) => {
+        if (this.unmountSignal.aborted) return;
+        runInAction(() => {
+          this.updateBusy = false;
+          if (error) {
+            this.globals.toast(error.message);
+            this.updateStatus = {
+              ...this.updateStatus,
+              state: 'error',
+              error: error.message,
+            } as UpdateStatus;
+            return;
+          }
+          this.updateStatus = data;
+          if (['checking', 'downloading'].includes(data.state)) {
+            this.updateTimer = setTimeout(() => this.refreshUpdate(), 1000);
+          }
+        });
+      },
+    );
+  }
+  updateApp() {
+    if (this.updateBusy) return;
+    const state = this.updateStatus?.state;
+    if (state === 'ready') {
+      const native = (
+        window as unknown as { TWNativeUpdater?: { install(): void } }
+      ).TWNativeUpdater;
+      if (native) {
+        native.install();
+        return;
+      }
+      this.updateRequest('/install', {});
+    } else if (state === 'available' && this.updateStatus?.supported) {
+      this.updateRequest('/download', {});
+    } else {
+      this.updateRequest('/check', {});
+    }
+  }
+  get updateMessage() {
+    const data = this.updateStatus;
+    if (!data) return 'Проверка новой версии через GitHub Releases.';
+    const current = `Установлено: ${data.current}${data.build ? ' · сборка ' + data.build : ''}. `;
+    const labels: Record<string, string> = {
+      idle: 'Нажмите «Обновить», чтобы проверить новую версию.',
+      checking: 'Проверяем GitHub Releases…',
+      available: `Доступна ${data.latest}.`,
+      latest: 'Установлена последняя версия.',
+      downloading: `Загружаем обновление: ${Math.floor(data.received / 1048576)} / ${Math.ceil(data.total / 1048576)} МиБ…`,
+      ready: 'Пакет проверен и готов. Нажмите «Установить».',
+      installing: 'Устанавливаем обновление. Приложение перезапустится.',
+      error: data.error,
+    };
+    return (
+      current +
+      (labels[data.state] || '') +
+      (!data.supported
+        ? ' Автоустановка доступна в установленном приложении на Android или рутованном webOS.'
+        : '')
+    );
   }
   setCredentials(field: 'login' | 'password', value: string) {
     this[field] = value;

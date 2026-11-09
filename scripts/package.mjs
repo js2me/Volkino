@@ -21,7 +21,9 @@ for (const key of ['icon', 'largeIcon']) {
 }
 fs.writeFileSync(path.join(app, 'appinfo.json'), JSON.stringify(appInfo, null, 2));
 fs.cpSync(path.join(root, 'server'), path.join(app, 'server'), { recursive: true });
+fs.writeFileSync(path.join(app, 'server/build-info.json'), JSON.stringify({version:pkg.version, build:Number(process.env.GITHUB_RUN_NUMBER || 0), platform:'webos'}));
 fs.mkdirSync(path.join(app, 'scripts'));
+fs.copyFileSync(path.join(root, 'scripts/install-on-tv.js'), path.join(app, 'scripts/install-on-tv.js'));
 fs.copyFileSync(path.join(root, 'scripts/start-tv.sh'), path.join(app, 'scripts/start-tv.sh'));
 const packageDir = path.join(staging, 'data/usr/palm/packages', id);
 fs.mkdirSync(packageDir, { recursive: true });

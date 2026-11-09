@@ -46,6 +46,7 @@ for (const name of ['index.html', 'catalog.js', 'catalog.css', 'icon.png', 'wolf
   fs.copyFileSync(path.join(root, 'app', name), path.join(staging, 'app', name));
 }
 fs.cpSync(path.join(root, 'server'), path.join(staging, 'server'), { recursive: true });
+fs.writeFileSync(path.join(staging, 'server/build-info.json'), JSON.stringify({version:JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).version, build:Number(process.env.GITHUB_RUN_NUMBER || 0), versionCode:Number(process.env.VOLKINO_VERSION_CODE || 902), platform:legacy ? 'android6' : 'android'}));
 const archive = path.join(assets, 'runtime.zip');
 fs.rmSync(archive, { force: true });
 execFileSync('zip', ['-qr', archive, 'app', 'server'], { cwd: staging });
