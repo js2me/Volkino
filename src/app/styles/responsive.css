@@ -39,7 +39,7 @@ html[data-device="tablet"] .player-control-row > span:last-child {
   display: none;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1100px), (any-pointer: coarse) {
   html:not([data-device="tv"]) body {
     font-size: 18px;
   }
@@ -118,6 +118,50 @@ html[data-device="tablet"] .player-control-row > span:last-child {
   html:not([data-device="tv"]) .search-form .btn {
     margin: 0 0 0 10px;
     min-width: 0;
+  }
+}
+
+/* Wide touch screens still need tablet sizing rather than TV typography. */
+@media (min-width: 851px) and (any-pointer: coarse) {
+  html:not([data-device="tv"]) body {
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .screen-header h1 {
+    font-size: 28px;
+  }
+  html:not([data-device="tv"]) h2 {
+    font-size: 23px;
+  }
+  html:not([data-device="tv"]) .input,
+  html:not([data-device="tv"]) .catalog-filters .input,
+  html:not([data-device="tv"]) .filmix-filters .input {
+    height: 48px;
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .btn,
+  html:not([data-device="tv"]) .catalog-filters .btn {
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .field label,
+  html:not([data-device="tv"]) .catalog-source-label,
+  html:not([data-device="tv"]) .muted,
+  html:not([data-device="tv"]) .catalog-summary {
+    font-size: 16px;
+  }
+  html:not([data-device="tv"]) .field small,
+  html:not([data-device="tv"]) .catalog-source-note {
+    font-size: 14px;
+  }
+  html:not([data-device="tv"]) .catalog-filter-hint {
+    display: none;
+  }
+  html:not([data-device="tv"]) .remote-select-option {
+    font-size: 16px;
+    min-height: 48px;
+    padding: 12px 16px;
   }
 }
 

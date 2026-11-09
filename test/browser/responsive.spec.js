@@ -11,6 +11,33 @@ async function fitsScreen(page) {
 }
 
 for (const viewport of [
+  { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+]) {
+  test.describe(`tablet ${viewport.width}×${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test('catalog uses compact text and keeps TV sizing separate', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.locator('.home-intro')).toBeVisible();
+      await page.evaluate(() => document.documentElement.dataset.device = 'tablet');
+      await page.locator('#nav-catalog').tap();
+      await expect(page.locator('.catalog-grid .poster-card')).toHaveCount(36);
+      await expect(page.locator('#catalog-type')).toHaveCSS('font-size', '16px');
+      await expect(page.locator('#catalog-type')).toHaveCSS('height', '48px');
+      await expect(page.locator('#nav-catalog span')).toHaveCSS('font-size', '15px');
+      await expect(page.locator('.catalog-filter-hint')).toBeHidden();
+      await fitsScreen(page);
+
+      await page.evaluate(() => document.documentElement.dataset.device = 'tv');
+      await expect(page.locator('#catalog-type')).not.toHaveCSS('font-size', '16px');
+      await expect(page.locator('.catalog-filter-hint')).toBeVisible();
+    });
+  });
+}
+
+for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },
   { width: 430, height: 932 },
