@@ -165,5 +165,5 @@ exports.create = function (options) {
       stream.on('error', function () { res.destroy(); }); res.on('close', function () { stream.destroy(); }); stream.pipe(res);
     });
   }
-  return {list:list, add:add, remove:remove, retry:retry, serve:serve};
+  return {list:list, storage:function () { return require('./storage').read(directory); }, add:add, remove:remove, retry:retry, serve:serve};
 };

@@ -121,7 +121,11 @@ export function createMockMiddleware() {
         case '/api/torrents': return json(res, empty ? [] : [currentTorrent]);
         case '/api/add': currentTorrent = torrent(body.title || 'Торрент по ссылке'); return json(res, currentTorrent);
         case '/api/status': return json(res, { torrent: currentTorrent, files });
-        case '/api/downloads': return json(res, { items: downloads });
+        case '/api/downloads': {
+          const total = 64 * 1024 ** 3;
+          const used = 16 * 1024 ** 3 + downloads.reduce((sum, item) => sum + item.received, 0);
+          return json(res, { items: downloads, storage: { total, used, free: total - used } });
+        }
         case '/api/downloads/save': {
           const file = body.source === 'filmix' ? filmixPost(body.id).files.find(file => file.id === body.fileId) : files.find(file => file.id === body.fileId);
           if (!file) return json(res, { error: 'Видео не найдено' }, 400);

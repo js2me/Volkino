@@ -163,6 +163,10 @@ test('authenticated helper API validates torrent file, saves it and serves it af
     return fetch(base + '/api/' + route, { method: body ? 'POST' : 'GET', headers: { 'X-App-Token': token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   }
   assert.equal((await fetch(base + '/api/downloads/save', { method: 'POST' })).status, 403);
+  const emptyLibrary = await (await api('downloads')).json();
+  assert.deepEqual(emptyLibrary.items, []);
+  assert(emptyLibrary.storage.total > 0);
+  assert.equal(emptyLibrary.storage.used, emptyLibrary.storage.total - emptyLibrary.storage.free);
   assert.equal((await api('downloads/save', { hash, fileId: 99 })).status, 400);
   const response = await api('downloads/save', { hash, fileId: 1 });
   assert.equal(response.status, 200); const saved = await response.json();

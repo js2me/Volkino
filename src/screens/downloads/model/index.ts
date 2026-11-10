@@ -1,10 +1,14 @@
 import { action, makeObservable, observable, runInAction } from 'mobx';
 import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../../shared/lib/mobx';
-import type { DownloadItem } from '../../../app/services/types';
+import type {
+  DownloadItem,
+  DownloadStorage,
+} from '../../../app/services/types';
 
 export class DownloadsVM extends VM {
   items: DownloadItem[] = [];
+  storage: DownloadStorage | null = null;
   loading = true;
   error = '';
   busy: string[] = [];
@@ -14,6 +18,7 @@ export class DownloadsVM extends VM {
     super(params);
     makeObservable(this, {
       items: observable.ref,
+      storage: observable.ref,
       loading: observable,
       error: observable,
       busy: observable.ref,
@@ -31,30 +36,28 @@ export class DownloadsVM extends VM {
   load() {
     clearTimeout(this.timer);
     const request = ++this.request;
-    this.globals.api<{ items: DownloadItem[] }>(
-      'downloads',
-      null,
-      (error, data) => {
-        if (this.unmountSignal.aborted || request !== this.request) return;
-        runInAction(() => {
-          const first = this.loading;
-          this.loading = false;
-          this.error = error?.message || '';
-          if (!error)
-            this.items = data.items.map((item) => {
-              const previous = this.items.find((entry) => entry.id === item.id);
-              return previous
-                ? Object.assign(previous, item)
-                : observable(item);
-            });
-          if (first)
-            this.afterRender((root) =>
-              root.querySelector<HTMLElement>('button')?.focus(),
-            );
-          this.timer = setTimeout(this.load, 2000);
-        });
-      },
-    );
+    this.globals.api<{
+      items: DownloadItem[];
+      storage?: DownloadStorage | null;
+    }>('downloads', null, (error, data) => {
+      if (this.unmountSignal.aborted || request !== this.request) return;
+      runInAction(() => {
+        const first = this.loading;
+        this.loading = false;
+        this.error = error?.message || '';
+        this.storage = error ? null : data.storage || null;
+        if (!error)
+          this.items = data.items.map((item) => {
+            const previous = this.items.find((entry) => entry.id === item.id);
+            return previous ? Object.assign(previous, item) : observable(item);
+          });
+        if (first)
+          this.afterRender((root) =>
+            root.querySelector<HTMLElement>('button')?.focus(),
+          );
+        this.timer = setTimeout(this.load, 2000);
+      });
+    });
   }
   private mutate(item: DownloadItem, route: 'remove' | 'retry') {
     if (this.busy.includes(item.id)) return;

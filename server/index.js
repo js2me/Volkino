@@ -187,7 +187,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/api/updates/check' && req.method === 'POST') return updates.check();
     if (route === '/api/updates/download' && req.method === 'POST') return updates.download();
     if (route === '/api/updates/install' && req.method === 'POST') return updates.install();
-    if (route === '/api/downloads' && req.method === 'GET') return {items:downloads.list()};
+    if (route === '/api/downloads' && req.method === 'GET') return downloads.storage().then(function (storage) { return {items:downloads.list(), storage:storage}; });
     if (route === '/api/downloads/save' && req.method === 'POST') return body(req).then(saveDownload);
     if (route === '/api/downloads/remove' && req.method === 'POST') return body(req).then(function (b) { return downloads.remove(b.id); });
     if (route === '/api/downloads/retry' && req.method === 'POST') return body(req).then(function (b) { return downloads.retry(b.id); });

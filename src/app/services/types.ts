@@ -78,6 +78,12 @@ export type FilesRequest =
   | { source: 'torrent'; link: string; title: string; resume?: HistoryItem }
   | { source: 'filmix'; id: number; title: string; resume?: HistoryItem };
 
+export interface DownloadStorage {
+  total: number;
+  free: number;
+  used: number;
+}
+
 export interface DownloadItem {
   id: string;
   identity: Omit<SavedHistory, 'position' | 'duration' | 'updated'>;

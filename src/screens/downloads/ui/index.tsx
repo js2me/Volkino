@@ -15,6 +15,45 @@ export const Downloads = withViewModel(DownloadsVM, ({ model }) => (
       перед отключением сети. Для скачивания приложение должно оставаться
       открытым.
     </p>
+    <Show when={model.storage}>
+      {(storage) => (
+        <section class="download-storage" aria-label="Место для скачивания">
+          <div class="download-storage-summary">
+            <strong>
+              Свободно{' '}
+              {storage().free ? model.globals.bytes(storage().free) : '0 Б'}
+            </strong>
+            <span class="muted">из {model.globals.bytes(storage().total)}</span>
+          </div>
+          <div
+            class="download-storage-bar"
+            role="meter"
+            aria-label="Занято места на диске"
+            aria-valuemin={0}
+            aria-valuemax={storage().total}
+            aria-valuenow={storage().used}
+            aria-valuetext={
+              'Занято ' +
+              (storage().used ? model.globals.bytes(storage().used) : '0 Б') +
+              ', свободно ' +
+              (storage().free ? model.globals.bytes(storage().free) : '0 Б')
+            }
+          >
+            <div
+              style={{ width: (100 * storage().used) / storage().total + '%' }}
+            />
+          </div>
+          <p class="muted">
+            Занято{' '}
+            {storage().used ? model.globals.bytes(storage().used) : '0 Б'} ·
+            Диск с сохранёнными видео
+          </p>
+        </section>
+      )}
+    </Show>
+    <Show when={!model.loading && !model.error && !model.storage}>
+      <p class="muted">Не удалось определить свободное место на диске.</p>
+    </Show>
     <Show when={model.loading}>
       <ScreenMessage
         title="Открываем скачанное…"
