@@ -14,7 +14,8 @@ test('save a video, play it without source API requests, continue from history a
   await expect(page.locator('.save-video').first()).toBeVisible();
   const title = await page.locator('.file-card .torrent-title').first().innerText();
   await page.locator('.save-video').first().click();
-  await expect(page.locator('.save-video').first()).toHaveText('В скачанном');
+  await expect(page.locator('.save-video').first()).toHaveAttribute('title', 'В скачанном');
+  await expect(page.locator('.save-video').first()).toBeDisabled();
   await page.getByRole('button', { name: 'Скачанное', exact: true }).click();
   await expect(page.locator('.download-card')).toHaveCount(1);
   await expect(page.locator('.download-card')).toContainText(title.split('/').pop());

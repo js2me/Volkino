@@ -177,19 +177,57 @@ export const Files = withViewModel(FilesVM, ({ model }) => {
                 </span>
               </button>
               <button
-                class="btn save-video"
+                class="save-video"
+                classList={{ 'is-saved': model.saved.includes(file.id) }}
                 disabled={
                   model.saving.includes(file.id) ||
                   model.saved.includes(file.id)
                 }
                 onClick={() => model.save(file)}
-                aria-label={'Сохранить ' + file.path}
+                aria-label={
+                  (model.saving.includes(file.id)
+                    ? 'Добавляем… '
+                    : model.saved.includes(file.id)
+                      ? 'В скачанном: '
+                      : 'Сохранить ') + file.path
+                }
+                aria-busy={model.saving.includes(file.id)}
+                title={
+                  model.saving.includes(file.id)
+                    ? 'Добавляем…'
+                    : model.saved.includes(file.id)
+                      ? 'В скачанном'
+                      : 'Сохранить'
+                }
               >
-                {model.saving.includes(file.id)
-                  ? 'Добавляем…'
-                  : model.saved.includes(file.id)
-                    ? 'В скачанном'
-                    : '↓ Сохранить'}
+                <svg
+                  viewBox="0 0 24 24"
+                  width="24"
+                  height="24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <Show
+                    when={model.saving.includes(file.id)}
+                    fallback={
+                      <path
+                        d={
+                          model.saved.includes(file.id)
+                            ? 'M5 12l4 4L19 6'
+                            : 'M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4'
+                        }
+                      />
+                    }
+                  >
+                    <circle cx="5" cy="12" r="1" />
+                    <circle cx="12" cy="12" r="1" />
+                    <circle cx="19" cy="12" r="1" />
+                  </Show>
+                </svg>
               </button>
             </div>
           )}
