@@ -1,3 +1,4 @@
+import { titleSearchParams } from '../../../globals/catalog';
 import { action, makeObservable, observable, runInAction } from 'mobx';
 import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../../shared/lib/mobx';
@@ -33,7 +34,11 @@ export class FilmixSearchVM extends VM {
     this.loading = true;
     this.error = '';
     this.globals.api<{ results: FilmixResult[] }>(
-      'filmix/search?q=' + encodeURIComponent(this.query),
+      'filmix/search?q=' +
+        encodeURIComponent(this.query) +
+        (this.globals.filmixContext
+          ? titleSearchParams(this.globals.filmixContext)
+          : ''),
       null,
       (error, data) => {
         if (this.unmountSignal.aborted || request !== this.request) return;

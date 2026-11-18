@@ -195,3 +195,34 @@ for (const failure of ['source', 'silent', 'resume', 'analyser', 'unavailable'])
     expect(errors).toEqual([]);
   });
 }
+
+test('LG uses native normalization, keeps its video element and restores on exit', async ({ page }) => {
+  await config(page, 'night');
+  await page.route('**/api/config', async route => {
+    const data = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...data, audioFix: 'night', webosAudio: true } });
+  });
+  const calls = [];
+  await page.route('**/api/audio-fix', async route => {
+    const data = route.request().postDataJSON(); calls.push(data);
+    await route.fulfill({ json: { active: data.mode !== 'off', message: 'Автогромкость LG включена' } });
+  });
+  await page.addInitScript(() => { window.AudioContext = function () { throw Error('LG must not route native media through Web Audio'); }; });
+  await page.goto('/'); await play(page);
+  await expect(page.locator('#audio-mode-status')).toHaveText('Автогромкость LG включена');
+  expect(calls[0].mode).toBe('night');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => calls.some(c => c.mode === 'off' && c.lease === calls[0].lease)).toBe(true);
+});
+
+test('LG optical output explains the limitation and continues with original audio', async ({ page }) => {
+  await page.route('**/api/config', async route => {
+    const data = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...data, audioFix: 'night', webosAudio: true } });
+  });
+  await page.route('**/api/audio-fix', route => route.fulfill({ json: { active: false, message: 'Автогромкость LG недоступна для этого выхода (external_optical)' } }));
+  await page.goto('/'); await play(page);
+  await expect(page.locator('#audio-mode-status')).toContainText('Оригинальный звук');
+  await expect(page.locator('#toast')).toContainText('external_optical');
+  await expect.poll(() => page.locator('#video').evaluate(video => video.currentTime)).toBeGreaterThan(.5);
+});

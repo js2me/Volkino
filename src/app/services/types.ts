@@ -17,6 +17,8 @@ export type View =
 export interface Config {
   seekStep?: number;
   audioFix?: AudioFixMode;
+  webosAudio?: boolean;
+  webosSubtitles?: boolean;
   torrserverMode?: string;
   localCacheSize?: number;
   localPreloadCache?: number;

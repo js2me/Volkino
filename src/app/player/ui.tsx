@@ -38,6 +38,14 @@ export const Player = withViewModel(PlayerVM, ({ model }) => (
             {model.audioLabel}
           </button>
           <button
+            id="player-subtitles"
+            class="btn"
+            disabled={model.subtitleDisabled}
+            onClick={model.subtitleTrack}
+          >
+            {model.subtitleLabel}
+          </button>
+          <button
             id="player-audio-fix"
             class="btn"
             disabled={!model.audioFixSupported}

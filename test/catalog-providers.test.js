@@ -3,7 +3,7 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const now=()=>Date.UTC(2026,9,25);
 test('CUB cards preserve safe metadata and movie and series identities',()=>{
  const movie=providers.card('cub',{id:1,title:'<b>Фильм</b>',original_title:'Film',release_date:'2026-04-01',vote_average:8.45,poster_path:'/abc.jpg',overview:'<script>bad()</script>Описание'},'movie');
- assert.equal(movie.id,'tmdb:movie:1');assert.equal(movie.title,'Фильм');assert.equal(movie.description,'Описание');assert.equal(movie.searchTitle,'Фильм');assert.equal(movie.provider,'cub');assert.match(movie.poster,/^\/catalog-poster\?url=/);
+ assert.equal(movie.id,'tmdb:movie:1');assert.equal(movie.title,'Фильм');assert.equal(movie.description,'Описание');assert.equal(movie.searchTitle,'Film');assert.equal(movie.originalTitle,'Film');assert.equal(movie.provider,'cub');assert.match(movie.poster,/^\/catalog-poster\?url=/);
  assert.equal(providers.card('cub',{id:1,name:'Сериал'},null).id,'tmdb:tv:1');
  assert.equal(providers.card('cub',{id:'not-id',title:'Bad'},null),null);
 });

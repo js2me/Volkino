@@ -1,4 +1,4 @@
-import { createCatalogSession } from './catalog';
+import { preferredTitle, createCatalogSession } from './catalog';
 import { createLatestSession } from './latest';
 import { audioProcessor } from '../app/audio/processor';
 import type { NavigationVM } from '../app/navigation/model';
@@ -112,6 +112,7 @@ export class Globals {
   searchFromDetail = false;
   filmixOrigin: 'latest' | 'details' | 'direct-details' | 'search' = 'search';
   private filesOrigin: View | null = null;
+  filmixContext: CatalogItem | null = null;
   filmixQuery = '';
   filmixResults: FilmixResult[] | null = null;
   filmixId = 0;
@@ -194,6 +195,7 @@ export class Globals {
             return;
           }
           this.config = config;
+          this.audio.native = !!config.webosAudio;
           this.persistHistory();
           this.startupPending = false;
           const view = this.requestedStartView || this.view || 'home';
@@ -335,7 +337,7 @@ export class Globals {
   openDetails(item: CatalogItem) {
     this.detailItem = item;
     this.searchFromDetail = true;
-    this.state.query = item.searchTitle || item.title;
+    this.state.query = preferredTitle(item);
     this.state.results = [];
     this.state.searchStatus = null;
     this.detailScroll = 0;
@@ -369,7 +371,8 @@ export class Globals {
         this.searchFromDetail && this.detailItem ? 'details' : 'search',
       );
   }
-  filmixSearch(query: string) {
+  filmixSearch(query: string, context: CatalogItem | null = null) {
+    this.filmixContext = context;
     query = query.trim();
     if (query.length < 2) {
       this.toast('Введите хотя бы два символа');

@@ -25,7 +25,7 @@ public final class PlayerActivity extends Activity {
     private LinearLayout optionsPanel, episodesPanel;
     private TextView status;
     private ProgressBar buffering;
-    private Button audioButton, fitButton;
+    private Button audioButton, subtitleButton, fitButton;
     private JSONArray episodes = new JSONArray();
     private long nextFileId = -1;
     private int fitMode;
@@ -37,6 +37,7 @@ public final class PlayerActivity extends Activity {
     private long resume, position, duration, lastPublish;
     private boolean completed, seeking, viewsAttached;
     private int restoreAudioTrack = -1;
+    private int restoreSubtitleTrack = Integer.MIN_VALUE;
     private int step;
     private AudioManager audio;
     private final AudioManager.OnAudioFocusChangeListener audioFocus = change -> {
@@ -72,6 +73,7 @@ public final class PlayerActivity extends Activity {
         optionsPanel = column(); optionsPanel.setVisibility(View.GONE); top.addView(optionsPanel);
         LinearLayout optionButtons = row(optionsPanel);
         audioButton = add(optionButtons, "Аудио: загрузка…", this::cycleAudio);
+        subtitleButton = add(optionButtons, "Субтитры: загрузка…", this::cycleSubtitles);
         fitButton = add(optionButtons, "", () -> { fitMode = (fitMode + 1) % 3; applyFit(); });
         add(optionButtons, "Готово", () -> { optionsPanel.setVisibility(View.GONE); showControls(); });
         TextView eyebrow = label("СЕЙЧАС НА ЭКРАНЕ", 11); eyebrow.setTextColor(0xffc3c1cb);
@@ -109,7 +111,7 @@ public final class PlayerActivity extends Activity {
         });
         try { episodes = new JSONArray(getIntent().getStringExtra("episodes")); } catch (Exception ignored) { }
         fitMode = getPreferences(MODE_PRIVATE).getInt("fitMode", 0);
-        if (state != null) fitMode = state.getInt("fitMode", fitMode);
+        if (state != null) { fitMode = state.getInt("fitMode", fitMode); restoreSubtitleTrack = state.getInt("subtitleTrack", Integer.MIN_VALUE); }
         timeline.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             public void onStartTrackingTouch(SeekBar bar) { seeking = true; handler.removeCallbacks(hide); }
             public void onProgressChanged(SeekBar bar, int progress, boolean user) {
@@ -133,6 +135,7 @@ public final class PlayerActivity extends Activity {
                 if (resume > 0 && (event.type == MediaPlayer.Event.Playing || event.type == MediaPlayer.Event.SeekableChanged) && player.isSeekable()) { player.setTime(resume); resume = 0; }
                 if (event.type == MediaPlayer.Event.Playing) {
                     if (restoreAudioTrack >= 0 && player.setAudioTrack(restoreAudioTrack)) restoreAudioTrack = -1;
+                    if (restoreSubtitleTrack != Integer.MIN_VALUE && player.setSpuTrack(restoreSubtitleTrack)) restoreSubtitleTrack = Integer.MIN_VALUE;
                     if (pause != null) pause.setText("Пауза"); status.setText(""); buffering.setVisibility(View.GONE); showControls();
                 } else if (event.type == MediaPlayer.Event.Paused) { if (pause != null) pause.setText("Продолжить"); status.setText("Пауза"); showControls(); }
                 else if (event.type == MediaPlayer.Event.Buffering) {
@@ -240,6 +243,7 @@ public final class PlayerActivity extends Activity {
         for (MediaPlayer.TrackDescription track : tracks) if (track.id == player.getAudioTrack()) name = "Аудио: " + track.name;
         audioButton.setText(name + (tracks.size() > 1 ? " · следующая" : "")); audioButton.setEnabled(tracks.size() > 1);
         audioButton.setAlpha(tracks.size() > 1 ? 1f : .65f);
+        updateSubtitles();
     }
     private void cycleAudio() {
         ArrayList<MediaPlayer.TrackDescription> tracks = audioTracks();
@@ -247,6 +251,29 @@ public final class PlayerActivity extends Activity {
         int current = -1; for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).id == player.getAudioTrack()) current = i;
         MediaPlayer.TrackDescription next = tracks.get((current + 1) % tracks.size());
         if (player.setAudioTrack(next.id)) audioButton.setText("Аудио: " + next.name + " · следующая");
+    }
+    private ArrayList<MediaPlayer.TrackDescription> subtitleTracks() {
+        ArrayList<MediaPlayer.TrackDescription> subtitles = new ArrayList<>();
+        MediaPlayer.TrackDescription[] tracks = player == null ? null : player.getSpuTracks();
+        if (tracks != null) for (MediaPlayer.TrackDescription track : tracks) if (track.id >= 0) subtitles.add(track);
+        return subtitles;
+    }
+    private void updateSubtitles() {
+        ArrayList<MediaPlayer.TrackDescription> tracks = subtitleTracks();
+        String name = "Субтитры: выключены";
+        for (MediaPlayer.TrackDescription track : tracks) if (track.id == player.getSpuTrack()) name = "Субтитры: " + track.name;
+        subtitleButton.setText(tracks.isEmpty() ? "Субтитры: нет дорожек" : name + " · переключить");
+        subtitleButton.setEnabled(!tracks.isEmpty());
+        subtitleButton.setAlpha(tracks.isEmpty() ? .65f : 1f);
+    }
+    private void cycleSubtitles() {
+        ArrayList<MediaPlayer.TrackDescription> tracks = subtitleTracks();
+        if (tracks.isEmpty()) return;
+        int current = -1;
+        for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).id == player.getSpuTrack()) current = i;
+        int next = current + 1 < tracks.size() ? tracks.get(current + 1).id : -1;
+        if (!player.setSpuTrack(next)) Toast.makeText(this, "Не удалось переключить субтитры", Toast.LENGTH_SHORT).show();
+        updateSubtitles();
     }
     private String format(long ms) { long sec = ms / 1000; return sec >= 3600 ? String.format(java.util.Locale.ROOT, "%d:%02d:%02d", sec/3600, sec/60%60, sec%60) : String.format(java.util.Locale.ROOT, "%d:%02d", sec/60, sec%60); }
     private void publish(boolean closed, String error) {
@@ -297,13 +324,14 @@ public final class PlayerActivity extends Activity {
             publish(false, null);
             resume = position;
             restoreAudioTrack = player.getAudioTrack();
+            restoreSubtitleTrack = player.getSpuTrack();
             player.stop();
             player.detachViews();
             viewsAttached = false;
         }
         super.onStop();
     }
-    @Override protected void onSaveInstanceState(Bundle state) { state.putLong("position", position); state.putInt("fitMode", fitMode); super.onSaveInstanceState(state); }
+    @Override protected void onSaveInstanceState(Bundle state) { state.putLong("position", position); state.putInt("fitMode", fitMode); state.putInt("subtitleTrack", restoreSubtitleTrack != Integer.MIN_VALUE ? restoreSubtitleTrack : player == null ? Integer.MIN_VALUE : player.getSpuTrack()); super.onSaveInstanceState(state); }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             int key = event.getKeyCode();

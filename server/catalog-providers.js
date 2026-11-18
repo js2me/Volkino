@@ -26,7 +26,7 @@ function card(provider,m,forcedType){
   if(provider==='cinemeta')poster=image(m.poster,provider);
   if(provider==='yts')poster=image(m.medium_cover_image||m.small_cover_image,provider);
   var description=plain(m.overview||m.description||m.description_full||m.synopsis||m.summary,4000);
-  return{id:id,title:name,type:type,year:y,rating:r,poster:poster,metadata:metadata(y,r),description:description||'Описание пока недоступно.',searchTitle:name,provider:provider};
+  return{id:id,title:name,type:type,year:y,rating:r,poster:poster,metadata:metadata(y,r),description:description||'Описание пока недоступно.',originalTitle:plain(m.original_title||m.original_name||m.title_english||''),searchTitle:plain(m.original_title||m.original_name||m.title_english||name),provider:provider};
 }
 function cards(provider,data,type,filterYear){
   var list=provider==='cub'?data&&data.results:provider==='cinemeta'?data&&data.metas:data&&data.data&&data.data.movies;

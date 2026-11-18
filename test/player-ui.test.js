@@ -81,3 +81,28 @@ test('cancelling a touch drag restores position without seeking',t=>{
 test('native episode picker receives siblings and saves outgoing progress before switching',t=>{
  const calls=[];const h=boot(t,[item(2,230)],{play(...args){calls.push(args);}});h.player.play(files[0]);h.advance(100);const token=calls[0][4];assert.deepEqual(JSON.parse(calls[0][5]).map(f=>f.id),[1,2]);h.player.nativePlayback({token,position:180,duration:1000,closed:true,nextFileId:2});h.advance(100);assert.equal(calls[1][2],230);assert.equal(h.app.history().find(f=>f.fileId===1).position,180);
 });
+
+test('subtitles cycle from off through languages and back to off without affecting playback or metadata',t=>{
+ const h=boot(t);h.play();h.video.currentTime=123;h.video.paused=true;
+ h.video.textTracks=[{kind:'metadata',mode:'hidden'},
+ {kind:'subtitles',label:'Русские',language:'ru',mode:'disabled'},
+ {kind:'captions',label:'English SDH',language:'en',mode:'disabled'}];
+ h.player.updateOptions();assert.equal(h.player.subtitleDisabled,false);assert.match(h.player.subtitleLabel,/выключены/);
+ h.player.subtitleTrack();assert.equal(h.video.textTracks[1].mode,'showing');assert.match(h.player.subtitleLabel,/Русские/);
+ h.player.subtitleTrack();assert.equal(h.video.textTracks[1].mode,'disabled');assert.equal(h.video.textTracks[2].mode,'showing');
+ h.player.subtitleTrack();assert.equal(h.video.textTracks[2].mode,'disabled');assert.match(h.player.subtitleLabel,/выключены/);
+ assert.equal(h.video.textTracks[0].mode,'hidden');assert.equal(h.video.currentTime,123);assert.equal(h.video.paused,true);
+});
+test('a single default subtitle track can be turned off; late tracks respect the current selection',t=>{
+ const h=boot(t);h.play();h.video.textTracks=[{kind:'subtitles',language:'en',mode:'showing'}];
+ h.player.updateOptions();assert.equal(h.player.subtitleDisabled,false);h.player.subtitleTrack();assert.equal(h.video.textTracks[0].mode,'disabled');
+ h.video.textTracks.push({kind:'subtitles',language:'ru',mode:'showing'});h.player.updateOptions();assert.ok(h.video.textTracks.every(t=>t.mode==='disabled'));
+ h.player.subtitleTrack();assert.equal(h.video.textTracks[0].mode,'showing');
+});
+test('subtitle selection resets for a different episode and unsupported tracks report a failure',t=>{
+ const h=boot(t);h.play();const track={kind:'subtitles',label:'English',mode:'showing'};h.video.textTracks=[track];
+ h.player.subtitleTrack();h.player.play(files[1]);track.mode='showing';h.player.updateOptions();assert.match(h.player.subtitleLabel,/English/);
+ Object.defineProperty(track,'mode',{get:()=> 'showing',set(){throw Error('Unsupported');}});
+ h.player.subtitleTrack();assert.ok(h.player.playing);assert.match(h.app.toastText,/не поддерживает/);
+ h.video.textTracks=[];h.player.updateOptions();assert.equal(h.player.subtitleDisabled,true);
+});

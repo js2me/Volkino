@@ -1,6 +1,7 @@
 'use strict';
 // Node 8.12-compatible; no runtime dependencies. The TV runs this helper locally.
 var http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), URL = require('url'), crypto = require('crypto');
+var titleSearch = require('./title-search');
 var core = require('./core'),catalogModule=require('./catalog'),filmixModule=require('./filmix'),catalogHttp=require('./catalog-http'),providerModule=require('./catalog-providers'),catalogFilmix=require('./catalog-filmix');
 var PORT = Number(process.env.PORT || 32190), HOST = process.env.HOST || '127.0.0.1';
 var APP = path.resolve(__dirname, '../app');
@@ -93,7 +94,10 @@ function body(req) {
     req.on('end', function () { try { resolve(JSON.parse(data || '{}')); } catch (_) { reject(new Error('Некорректный JSON')); } }); req.on('error', reject);
   });
 }
-function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; delete out.filmixToken; delete out.filmixDeviceId; delete out.filmixWebHash; delete out.filmixWebAccessToken; delete out.filmixWebRefreshToken; out.hasFilmixToken=config.filmixTransport==='web'?!!config.filmixWebAccessToken:!!config.filmixToken; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
+var webosSubtitles = require('./webos-subtitles').create();
+var webosAudio = require('./webos-audio').create({directory:path.dirname(CONFIG)});
+webosAudio.ready.catch(function(e){console.error('Cannot restore LG audio:',e.message);});
+function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; delete out.filmixToken; delete out.filmixDeviceId; delete out.filmixWebHash; delete out.filmixWebAccessToken; delete out.filmixWebRefreshToken; out.webosAudio=webosAudio.supported; out.webosSubtitles=webosSubtitles.supported; out.hasFilmixToken=config.filmixTransport==='web'?!!config.filmixWebAccessToken:!!config.filmixToken; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
 function validSeekStep(value) { return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= 1 && value <= 3600; }
 function validLocalSetting(key, value) { var range = localSettingRanges[key]; return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= range[1] && value <= range[2]; }
 function validateConfig(data) {
@@ -194,6 +198,9 @@ var server = http.createServer(function (req, res) {
     if (route.indexOf('/download-media/') === 0 && ['GET','HEAD'].indexOf(req.method) >= 0) {
       var parts = route.split('/'); downloads.serve(req, res, parts[2], parts[3]); return null;
     }
+    if (route === '/api/subtitles' && req.method === 'GET') return webosSubtitles.read(q.mediaId);
+    if (route === '/api/subtitles' && req.method === 'POST') return body(req).then(function(b){return webosSubtitles.select(b.mediaId,b.index);});
+    if (route === '/api/audio-fix' && req.method === 'POST') return body(req).then(function(b){return webosAudio.set(b.mode,b.lease);});
     if (route === '/api/config' && req.method === 'GET') return publicConfig();
     if (route === '/api/config' && req.method === 'POST') return body(req).then(function (b) {
       var next = validateConfig(b);
@@ -215,7 +222,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/api/local-server/stop' && req.method === 'POST') {
       return localTS.stop().then(function () { saveConfig({torrserverMode: 'external'}); return localTS.status(); });
     }
-    if (route === '/api/filmix/search' && req.method === 'GET') return filmix.search(q.q);
+    if (route === '/api/filmix/search' && req.method === 'GET') return titleSearch.context(q) ? titleSearch.find(titleSearch.context(q),function(query){return filmix.search(query);},false) : filmix.search(q.q);
     if (route === '/api/latest' && req.method === 'GET') {
       if(q.source&&q.source!=='filmix')throw new Error('Последние добавления доступны только для Filmix');
       return filmix.latest(q.page,q.refresh==='1');
@@ -237,7 +244,7 @@ var server = http.createServer(function (req, res) {
     if (route === '/api/catalog/item' && req.method === 'GET') {var key=String(q.key||'');return /^filmix:/.test(key)?catalogFilmix.details(filmix,key):catalog.item(key);}
     if (route === '/catalog-poster' && (req.method === 'GET'||req.method === 'HEAD')) return catalogHttp.poster(req,res,String(q.url||''));
     if (route === '/poster' && (req.method === 'GET'||req.method === 'HEAD')) {sendPoster(req,res,String(q.path||''));return null;}
-    if (route === '/api/search' && req.method === 'GET') return search(String(q.q || ''));
+    if (route === '/api/search' && req.method === 'GET') return titleSearch.context(q) ? titleSearch.find(titleSearch.context(q),search,true) : search(String(q.q || ''));
     if (route === '/api/enable-search' && req.method === 'POST') return tsJSON('/settings', { action: 'get' }).then(function (s) { if (s.EnableRutorSearch) return { ok: true }; s.EnableRutorSearch = true; return ts('/settings', { action: 'set', sets: s }).then(function () { return { ok: true, message: 'Поиск включён. Первая загрузка индекса может занять несколько минут.' }; }); });
     if (route === '/api/torrents' && req.method === 'GET') return tsJSON('/torrents', { action: 'list' });
     if (route === '/api/add' && req.method === 'POST') return body(req).then(function (b) { return tsJSON('/torrents', { action: 'add', link: core.torrentLink(b.link), title: String(b.title || '').slice(0,500), save_to_db: true }); });
@@ -256,6 +263,6 @@ var server = http.createServer(function (req, res) {
 });
 if (config.torrserverMode === 'local') localTS.run(false);
 process.once('exit', function () { localTS.kill(); });
-['SIGTERM', 'SIGINT'].forEach(function (signal) { process.once(signal, function () { localTS.kill(); server.close(); process.exit(0); }); });
+['SIGTERM', 'SIGINT'].forEach(function (signal) { process.once(signal, function () { localTS.kill(); server.close(); webosAudio.close().catch(function(e){console.error(e.message);}).then(function(){process.exit(0);}); }); });
 server.listen(PORT, HOST, function () { console.log('VolKino: http://' + HOST + ':' + PORT); });
 module.exports = server;

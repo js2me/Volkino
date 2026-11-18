@@ -7,7 +7,11 @@ import {
 } from 'mobx';
 import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../../shared/lib/mobx';
-import type { CatalogItem } from '../../../globals/catalog';
+import {
+  preferredTitle,
+  titleSearchParams,
+  type CatalogItem,
+} from '../../../globals/catalog';
 import type { SearchResult } from '../../../shared/types/screens';
 
 type Details = CatalogItem & { metadata?: string; description?: string };
@@ -75,6 +79,7 @@ export class DetailsVM extends VM {
           runInAction(() => {
             this.loading = false;
             if (error) return;
+            const previousSearch = titleSearchParams(item);
             this.item = {
               ...item,
               ...data,
@@ -82,8 +87,11 @@ export class DetailsVM extends VM {
               poster: data.poster || item.poster,
             };
             this.globals.detailItem = this.item;
-            const query = data.searchTitle || data.title;
-            if (query !== this.globals.state.query) {
+            const query = preferredTitle(this.item);
+            if (
+              query !== this.globals.state.query ||
+              previousSearch !== titleSearchParams(this.item)
+            ) {
               this.globals.state.query = query;
               if (item.provider !== 'filmix') this.runSearch();
             }
@@ -114,7 +122,9 @@ export class DetailsVM extends VM {
     this.error = false;
     this.saveResults();
     this.globals.api<{ results: SearchResult[]; hint?: string }>(
-      'search?q=' + encodeURIComponent(this.globals.state.query),
+      'search?q=' +
+        encodeURIComponent(this.globals.state.query) +
+        (this.item ? titleSearchParams(this.item) : ''),
       null,
       (error, data) => {
         if (this.unmountSignal.aborted || request !== this.request) return;
@@ -144,7 +154,7 @@ export class DetailsVM extends VM {
     if (this.item?.provider === 'filmix')
       this.globals.openFilmix(Number(this.item.id.slice(7)), this.item.title);
     else if (this.item)
-      this.globals.filmixSearch(this.item.searchTitle || this.item.title);
+      this.globals.filmixSearch(preferredTitle(this.item), this.item);
   }
   back() {
     this.globals.change(this.globals.detailOrigin);

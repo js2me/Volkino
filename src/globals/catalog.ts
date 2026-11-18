@@ -16,6 +16,7 @@ export interface CatalogItem {
   rating?: string;
   poster?: string;
   searchTitle?: string;
+  originalTitle?: string;
   provider?: string;
   metadata?: string;
   description?: string;
@@ -106,4 +107,21 @@ export interface CatalogPage {
   retry(): void;
   loadMore(): void;
   open(item: CatalogItem, scroll: number): void;
+}
+
+/** Send identity hints only when searching from a selected catalogue card. */
+export function titleSearchParams(item: CatalogItem) {
+  return (
+    '&title=' +
+    encodeURIComponent(item.title) +
+    '&originalTitle=' +
+    encodeURIComponent(item.originalTitle || '') +
+    '&year=' +
+    encodeURIComponent(item.year || '') +
+    '&type=' +
+    item.type
+  );
+}
+export function preferredTitle(item: CatalogItem) {
+  return item.originalTitle || item.searchTitle || item.title;
 }

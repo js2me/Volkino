@@ -11,7 +11,7 @@ test('details searches immediately; a later description preserves results',t=>{
 });
 test('refined titles discard earlier responses and unmounted details ignore late descriptions',t=>{
  const h=boot(t);h.app.openItem(movie,'home');h.reply('catalog/item?',{...movie,searchTitle:'Original title'});
- assert.ok(h.requests.some(r=>r.route==='search?q=Original%20title'));
+ assert.ok(h.requests.some(r=>r.route.startsWith('search?q=Original%20title&')));
  h.reply('search?',{results:[torrent]});assert.equal(h.app.state.results.length,0);
  h.reply('search?',{results:[{...torrent,title:'Correct result'}]});assert.equal(h.app.state.results[0].title,'Correct result');
  h.app.openItem(movie,'home');h.app.change('files');h.reply('catalog/item?',{...movie,description:'Late'});h.reply('search?',{results:[torrent]});assert.notEqual(h.app.detailItem.description,'Late');assert.equal(h.app.view,'files');
@@ -31,4 +31,14 @@ test('local installation errors stay visible without changing selected mode',t=>
 });
 test('late local-server actions cannot start polling after settings unmount',t=>{
  const h=boot(t);const settings=h.settings();settings.localAction('start');settings.unmount();h.reply('local-server/start',{});assert.equal(h.requests.filter(r=>r.route==='local-server').length,0);
+});
+
+test('details passes original title, year and type to both searches',t=>{
+ const h=boot(t), item={...movie,originalTitle:'The Movie',year:'2026'};
+ h.app.openItem(item,'home');
+ const request=h.requests.find(r=>r.route.startsWith('search?'));
+ const q=new URLSearchParams(request.route.split('?')[1]);
+ assert.equal(q.get('q'),'The Movie');assert.equal(q.get('title'),'Фильм');assert.equal(q.get('originalTitle'),'The Movie');assert.equal(q.get('year'),'2026');assert.equal(q.get('type'),'movie');
+ h.screen.filmix();assert.equal(h.app.filmixQuery,'The Movie');assert.equal(h.app.filmixContext.id,item.id);
+ h.app.filmixSearch('Manual');assert.equal(h.app.filmixContext,null);
 });

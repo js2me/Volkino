@@ -19,7 +19,14 @@ interface AudioTrack {
 }
 type TrackVideo = HTMLVideoElement & {
   audioTracks?: ArrayLike<AudioTrack> & EventTarget;
+  mediaId?: string;
 };
+interface NativeSubtitles {
+  mediaId: string;
+  tracks: { index: number; label: string }[];
+  enabled: boolean | null;
+  selected: number | null;
+}
 interface Playback {
   file: MediaFile;
   download?: DownloadItem;
@@ -52,8 +59,13 @@ export class PlayerVM extends VM {
   fitIndex = 0;
   audioLabel = '';
   audioDisabled = true;
+  subtitleLabel = 'Субтитры: нет дорожек';
+  subtitleDisabled = true;
+  private nativeSubtitles: NativeSubtitles | null = null;
+  private subtitleBusy = false;
   audioFixMode: AudioFixMode = 'off';
   resume = 0;
+  private subtitleChoice: number | null = null;
   private returnFocus: HTMLElement | null = null;
   private seekControl!: ReturnType<typeof create>;
   private overlayTimer?: ReturnType<typeof setTimeout>;
@@ -89,7 +101,10 @@ export class PlayerVM extends VM {
   constructor(params: ViewModelParams) {
     super(params);
     this.globals.player = this;
-    makeObservable<this, 'startVideo' | 'recoverAudio'>(this, {
+    makeObservable<
+      this,
+      'startVideo' | 'recoverAudio' | 'nativeSubtitles' | 'subtitleBusy'
+    >(this, {
       startVideo: action.bound,
       recoverAudio: action.bound,
       playing: observable.ref,
@@ -108,6 +123,10 @@ export class PlayerVM extends VM {
       fitIndex: observable,
       audioLabel: observable,
       audioDisabled: observable,
+      subtitleLabel: observable,
+      subtitleDisabled: observable,
+      nativeSubtitles: observable.ref,
+      subtitleBusy: observable,
       audioFixMode: observable,
       play: action.bound,
       stop: action.bound,
@@ -121,6 +140,7 @@ export class PlayerVM extends VM {
       selectEpisode: action.bound,
       cycleFit: action.bound,
       audioTrack: action.bound,
+      subtitleTrack: action.bound,
       cycleAudioFix: action.bound,
       onMedia: action.bound,
       onPointer: action.bound,
@@ -233,12 +253,18 @@ export class PlayerVM extends VM {
       'timeupdate',
     ])
       video.addEventListener(type, () => this.onMedia(type));
+    if (video.textTracks?.addEventListener)
+      for (const type of ['addtrack', 'removetrack', 'change'])
+        video.textTracks.addEventListener(type, this.updateOptions);
     if (video.audioTracks?.addEventListener)
       for (const type of ['addtrack', 'removetrack', 'change'])
         video.audioTracks.addEventListener(type, this.updateOptions);
   }
   play(file: MediaFile, resume = 0, download?: DownloadItem) {
     if (!this.seekControl) return;
+    this.subtitleChoice = null;
+    this.nativeSubtitles = null;
+    this.subtitleBusy = false;
     this.closeOptions();
     if (this.playing) this.saveHistory();
     else this.returnFocus = document.activeElement as HTMLElement;
@@ -699,6 +725,7 @@ export class PlayerVM extends VM {
     if (this.episodesOpen) this.closeEpisodes();
     this.optionsOpen = true;
     this.updateOptions();
+    this.refreshNativeSubtitles();
     this.showOverlay();
     this.afterRender((root) =>
       root
@@ -740,6 +767,107 @@ export class PlayerVM extends VM {
     if (this.fitIndex === 3) x = y = 1.33;
     this.video.style.transform = `scale(${x}, ${y})`;
   }
+  private get subtitleTracks() {
+    return Array.from(this.video?.textTracks || []).filter(
+      (track) => track.kind === 'subtitles' || track.kind === 'captions',
+    );
+  }
+  private subtitleName(track: TextTrack, index: number) {
+    return track.label || track.language || 'Дорожка ' + (index + 1);
+  }
+  private refreshNativeSubtitles() {
+    const current = this.playing;
+    const mediaId = this.video?.mediaId;
+    if (
+      !current ||
+      !mediaId ||
+      !this.globals.config.webosSubtitles ||
+      this.subtitleBusy ||
+      this.subtitleTracks.length
+    )
+      return;
+    this.subtitleBusy = true;
+    this.globals.api<NativeSubtitles>(
+      'subtitles?mediaId=' + encodeURIComponent(mediaId),
+      null,
+      action((error, data) => {
+        if (this.playing !== current || this.video.mediaId !== mediaId) return;
+        this.subtitleBusy = false;
+        if (!error) this.nativeSubtitles = data;
+        this.updateOptions();
+      }),
+    );
+  }
+  private cycleNativeSubtitles() {
+    const state = this.nativeSubtitles;
+    const current = this.playing;
+    if (!state?.tracks.length || !current || this.subtitleBusy) return;
+    const selected = state.tracks.findIndex((t) => t.index === state.selected);
+    // Unknown native default: the first press explicitly switches subtitles off.
+    const next =
+      state.enabled === null
+        ? -1
+        : state.enabled === false
+          ? state.tracks[0].index
+          : selected + 1 < state.tracks.length
+            ? state.tracks[selected + 1].index
+            : -1;
+    this.subtitleBusy = true;
+    this.updateOptions();
+    this.globals.api<NativeSubtitles>(
+      'subtitles',
+      { mediaId: state.mediaId, index: next },
+      action((error, data) => {
+        if (this.playing !== current || this.video.mediaId !== state.mediaId)
+          return;
+        this.subtitleBusy = false;
+        if (error) {
+          this.globals.toast(error.message);
+          this.refreshNativeSubtitles();
+        } else {
+          this.nativeSubtitles = data;
+          this.updateOptions();
+          this.globals.toast(this.subtitleLabel);
+        }
+      }),
+    );
+  }
+  subtitleTrack() {
+    const tracks = this.subtitleTracks;
+    if (!tracks.length) {
+      this.cycleNativeSubtitles();
+      return;
+    }
+    const current = tracks.findIndex((track) => track.mode === 'showing');
+    const next = current + 1 < tracks.length ? current + 1 : -1;
+    const previous = tracks.map((track) => track.mode);
+    try {
+      // Disable every subtitle/caption track, including a forced/default track.
+      tracks.forEach((track) => {
+        track.mode = 'disabled';
+      });
+      if (next >= 0) tracks[next].mode = 'showing';
+      if (
+        tracks.some(
+          (track, i) => track.mode !== (i === next ? 'showing' : 'disabled'),
+        )
+      )
+        throw new Error('Unsupported subtitle selection');
+      this.subtitleChoice = next;
+      this.updateOptions();
+      this.globals.toast(this.subtitleLabel);
+    } catch {
+      tracks.forEach((track, i) => {
+        try {
+          track.mode = previous[i];
+        } catch {}
+      });
+      this.updateOptions();
+      this.globals.toast(
+        'Устройство не поддерживает переключение этих субтитров',
+      );
+    }
+  }
   updateOptions() {
     const tracks = this.video?.audioTracks;
     let index = -1;
@@ -757,6 +885,41 @@ export class PlayerVM extends VM {
               'Дорожка ' + (index + 1)
             : 'выбрать') +
           ' · OK — следующая';
+    const subtitles = this.subtitleTracks;
+    if (this.subtitleChoice !== null) {
+      try {
+        subtitles.forEach((track, i) => {
+          const mode = i === this.subtitleChoice ? 'showing' : 'disabled';
+          if (track.mode !== mode) track.mode = mode;
+        });
+      } catch {
+        this.subtitleChoice = null;
+      }
+    }
+    const selectedSubtitle = subtitles.findIndex(
+      (track) => track.mode === 'showing',
+    );
+    this.subtitleDisabled = !subtitles.length;
+    this.subtitleLabel = !subtitles.length
+      ? 'Субтитры: нет доступных дорожек'
+      : 'Субтитры: ' +
+        (selectedSubtitle < 0
+          ? 'выключены'
+          : this.subtitleName(subtitles[selectedSubtitle], selectedSubtitle)) +
+        ' · OK — переключить';
+    const native = this.nativeSubtitles;
+    if (!subtitles.length && native?.tracks.length) {
+      this.subtitleDisabled = this.subtitleBusy;
+      this.subtitleLabel =
+        native.enabled === null
+          ? 'Субтитры: авто · OK — выключить'
+          : native.enabled === false
+            ? 'Субтитры: выключены · OK — включить'
+            : 'Субтитры: ' +
+              (native.tracks.find((t) => t.index === native.selected)?.label ||
+                'включены') +
+              ' · OK — переключить';
+    }
     this.applyFit();
     if (
       this.optionsOpen &&
@@ -811,6 +974,8 @@ export class PlayerVM extends VM {
   }
   onMedia(type: string) {
     const video = this.video;
+    if (type === 'loadedmetadata' || type === 'playing')
+      this.refreshNativeSubtitles();
     if (type === 'resize') this.applyFit();
     if (type === 'seeked') this.seekControl.update();
     if (type === 'loadedmetadata') {

@@ -54,7 +54,7 @@ function details(filmix, key) {
   return filmix.details(id).then(function(d) {
     if (!d || !d.title) throw new Error('Filmix не вернул описание фильма');
     var metadata = [d.year, d.kpRating ? 'Кинопоиск ' + d.kpRating : '', d.imdbRating ? 'IMDb ' + d.imdbRating : ''].filter(Boolean).join(' · ');
-    return {id:'filmix:' + id, provider:'filmix', title:catalog.text(d.title), searchTitle:catalog.text(d.originalTitle || d.title), poster:d.poster || '', description:catalog.text(d.description), year:String(d.year || ''), metadata:metadata};
+    return {id:'filmix:' + id, provider:'filmix', title:catalog.text(d.title), originalTitle:catalog.text(d.originalTitle), searchTitle:catalog.text(d.originalTitle || d.title), poster:d.poster || '', description:catalog.text(d.description), year:String(d.year || ''), metadata:metadata};
   });
 }
 

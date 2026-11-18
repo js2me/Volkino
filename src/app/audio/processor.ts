@@ -11,9 +11,65 @@ interface Session {
 
 export class AudioProcessor {
   private session: Session | null = null;
+  native = false;
+  private nativeLease = '';
+  private nativeTimer?: ReturnType<typeof setInterval>;
+  private nativeQueue = Promise.resolve();
+  private nativeRequest(mode: AudioFixMode, lease: string) {
+    const request = this.nativeQueue.then(async () => {
+      if (mode !== 'off' && this.nativeLease !== lease)
+        return { active: false, message: '' };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      try {
+        const session = await (
+          await fetch('/api/session', { signal: controller.signal })
+        ).json();
+        const response = await fetch('/api/audio-fix', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-App-Token': session.token,
+          },
+          body: JSON.stringify({ mode, lease }),
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error || 'Не удалось включить автогромкость LG');
+        return data as { active: boolean; message: string };
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+    this.nativeQueue = request.then(
+      () => {},
+      () => {},
+    );
+    return request;
+  }
+  private attachNative(
+    mode: AudioFixMode,
+    report: (active: boolean, message: string) => void,
+  ) {
+    const lease =
+      Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    this.nativeLease = lease;
+    const update = () => {
+      void this.nativeRequest(mode, lease)
+        .then((data) => {
+          if (this.nativeLease === lease) report(data.active, data.message);
+        })
+        .catch((error: Error) => {
+          if (this.nativeLease === lease) report(false, error.message);
+        });
+    };
+    update();
+    this.nativeTimer = setInterval(update, 15000);
+  }
 
   get supported() {
-    return typeof window.AudioContext === 'function';
+    return this.native || typeof window.AudioContext === 'function';
   }
 
   /** Must be called from the file activation gesture, before delayed playback. */
@@ -23,6 +79,10 @@ export class AudioProcessor {
     report: (active: boolean, message: string) => void,
   ) {
     if (mode === 'off') return;
+    if (this.native) {
+      this.attachNative(mode, report);
+      return;
+    }
     if (!this.supported) {
       report(false, 'На этом устройстве обработка звука недоступна');
       return;
@@ -97,6 +157,11 @@ export class AudioProcessor {
 
   /** Returns whether the shell must replace the consumed media element. */
   reset() {
+    clearInterval(this.nativeTimer);
+    if (this.nativeLease) {
+      void this.nativeRequest('off', this.nativeLease).catch(() => {});
+      this.nativeLease = '';
+    }
     const session = this.session;
     this.session = null;
     if (!session) return false;
