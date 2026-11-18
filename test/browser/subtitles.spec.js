@@ -54,3 +54,20 @@ test('LG embedded subtitles use the native media service, including explicit off
   await button.click();await expect(button).toContainText('выключены');
   expect(choices).toEqual([-1,0,2,-1]);
 });
+
+test('app-rendered subtitles use a bounded text overlay and honor cue end times and off', async ({ page }) => {
+  await page.route('**/api/config', async route => {const c=await(await route.fetch()).json();await route.fulfill({json:{...c,webosSubtitles:true}});});
+  await page.addInitScript(()=>Object.defineProperty(HTMLMediaElement.prototype,'mediaId',{get:()=> '_movie'}));
+  let enabled=true;
+  await page.route('**/api/subtitles*',async route=>{
+    if(route.request().method()==='POST')enabled=route.request().postDataJSON().index>=0;
+    await route.fulfill({json:{mediaId:'_movie',tracks:[{index:0,label:'Русские',renderable:true}],renderer:'app',enabled,selected:0}});
+  });
+  await page.route('**/api/subtitle-cues?*',route=>route.fulfill({json:{cues:[{start:0,end:2,text:'вы должны взять её сами.'}]}}));
+  await page.goto('/');await page.locator('.home-section .poster-card').first().click();await page.locator('.detail-torrents .torrent').first().click();await page.locator('.file-card').first().click();
+  const overlay=page.locator('#player-subtitle-text');await expect(overlay).toHaveText('вы должны взять её сами.');
+  const style=await overlay.evaluate(e=>({width:e.getBoundingClientRect().width,font:parseFloat(getComputedStyle(e).fontSize),color:getComputedStyle(e).color,html:e.innerHTML}));
+  expect(style.font).toBeLessThan(45);expect(style.width).toBeLessThan(1600);expect(style.color).toBe('rgb(255, 255, 255)');expect(style.html).not.toContain('<font');
+  await expect(overlay).toBeEmpty();
+  await page.keyboard.press('ArrowUp');await page.locator('#player-subtitles').click();await expect(page.locator('#player-subtitles')).toContainText('выключены');await expect(overlay).toBeEmpty();
+});

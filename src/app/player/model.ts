@@ -23,7 +23,8 @@ type TrackVideo = HTMLVideoElement & {
 };
 interface NativeSubtitles {
   mediaId: string;
-  tracks: { index: number; label: string }[];
+  tracks: { index: number; label: string; renderable?: boolean }[];
+  renderer?: 'app' | 'native';
   enabled: boolean | null;
   selected: number | null;
 }
@@ -61,6 +62,12 @@ export class PlayerVM extends VM {
   audioDisabled = true;
   subtitleLabel = 'Субтитры: нет дорожек';
   subtitleDisabled = true;
+  subtitleText = '';
+  private subtitleCues: { start: number; end: number; text: string }[] = [];
+  private subtitleTimer?: ReturnType<typeof setInterval>;
+  private subtitleCueBusy = false;
+  private subtitlePollAt = 0;
+  private subtitleEpoch = 0;
   private nativeSubtitles: NativeSubtitles | null = null;
   private subtitleBusy = false;
   audioFixMode: AudioFixMode = 'off';
@@ -125,6 +132,7 @@ export class PlayerVM extends VM {
       audioDisabled: observable,
       subtitleLabel: observable,
       subtitleDisabled: observable,
+      subtitleText: observable,
       nativeSubtitles: observable.ref,
       subtitleBusy: observable,
       audioFixMode: observable,
@@ -242,6 +250,7 @@ export class PlayerVM extends VM {
     const video = this.video;
     for (const type of [
       'seeked',
+      'seeking',
       'loadedmetadata',
       'resize',
       'playing',
@@ -262,6 +271,7 @@ export class PlayerVM extends VM {
   }
   play(file: MediaFile, resume = 0, download?: DownloadItem) {
     if (!this.seekControl) return;
+    this.stopSubtitleOverlay();
     this.subtitleChoice = null;
     this.nativeSubtitles = null;
     this.subtitleBusy = false;
@@ -578,6 +588,7 @@ export class PlayerVM extends VM {
       });
   }
   stop() {
+    this.stopSubtitleOverlay();
     this.cancelDrag();
     this.closeOptions();
     this.saveHistory();
@@ -775,6 +786,71 @@ export class PlayerVM extends VM {
   private subtitleName(track: TextTrack, index: number) {
     return track.label || track.language || 'Дорожка ' + (index + 1);
   }
+  private stopSubtitleOverlay() {
+    clearInterval(this.subtitleTimer);
+    this.subtitleTimer = undefined;
+    this.subtitleEpoch++;
+    this.subtitleCueBusy = false;
+    this.subtitleCues = [];
+    this.subtitleText = '';
+  }
+  private renderSubtitle() {
+    const time = this.video.currentTime;
+    this.subtitleText = this.video.seeking
+      ? ''
+      : this.subtitleCues
+          .filter((cue) => cue.start <= time && cue.end > time)
+          .map((cue) => cue.text)
+          .join('\n');
+  }
+  private pollSubtitleCues() {
+    const current = this.playing,
+      state = this.nativeSubtitles;
+    if (
+      !current ||
+      state?.renderer !== 'app' ||
+      !state.enabled ||
+      state.selected === null ||
+      this.subtitleCueBusy
+    )
+      return;
+    const epoch = this.subtitleEpoch;
+    this.subtitleCueBusy = true;
+    this.subtitlePollAt = Date.now();
+    this.globals.api<{ cues: { start: number; end: number; text: string }[] }>(
+      'subtitle-cues?hash=' +
+        encodeURIComponent(current.identity.hash) +
+        '&index=' +
+        current.file.id +
+        '&track=' +
+        state.selected +
+        '&time=' +
+        (this.video.currentTime || 0),
+      null,
+      action((error, data) => {
+        if (this.playing !== current || epoch !== this.subtitleEpoch) return;
+        this.subtitleCueBusy = false;
+        if (!error) this.subtitleCues = data.cues;
+        this.renderSubtitle();
+      }),
+    );
+  }
+  private updateSubtitleOverlay() {
+    const state = this.nativeSubtitles;
+    if (state?.renderer !== 'app' || !state.enabled) {
+      this.stopSubtitleOverlay();
+      return;
+    }
+    this.stopSubtitleOverlay();
+    this.pollSubtitleCues();
+    this.subtitleTimer = setInterval(
+      action(() => {
+        this.renderSubtitle();
+        if (Date.now() - this.subtitlePollAt >= 700) this.pollSubtitleCues();
+      }),
+      100,
+    );
+  }
   private refreshNativeSubtitles() {
     const current = this.playing;
     const mediaId = this.video?.mediaId;
@@ -794,24 +870,35 @@ export class PlayerVM extends VM {
         if (this.playing !== current || this.video.mediaId !== mediaId) return;
         this.subtitleBusy = false;
         if (!error) this.nativeSubtitles = data;
+        this.updateSubtitleOverlay();
         this.updateOptions();
+        if (
+          !error &&
+          data.enabled === true &&
+          data.renderer !== 'app' &&
+          data.selected !== null &&
+          data.tracks.some((t) => t.index === data.selected && t.renderable)
+        )
+          this.cycleNativeSubtitles(data.selected);
       }),
     );
   }
-  private cycleNativeSubtitles() {
+  private cycleNativeSubtitles(target?: number) {
     const state = this.nativeSubtitles;
     const current = this.playing;
     if (!state?.tracks.length || !current || this.subtitleBusy) return;
     const selected = state.tracks.findIndex((t) => t.index === state.selected);
     // Unknown native default: the first press explicitly switches subtitles off.
     const next =
-      state.enabled === null
-        ? -1
-        : state.enabled === false
-          ? state.tracks[0].index
-          : selected + 1 < state.tracks.length
-            ? state.tracks[selected + 1].index
-            : -1;
+      target !== undefined
+        ? target
+        : state.enabled === null
+          ? -1
+          : state.enabled === false
+            ? state.tracks[0].index
+            : selected + 1 < state.tracks.length
+              ? state.tracks[selected + 1].index
+              : -1;
     this.subtitleBusy = true;
     this.updateOptions();
     this.globals.api<NativeSubtitles>(
@@ -826,6 +913,7 @@ export class PlayerVM extends VM {
           this.refreshNativeSubtitles();
         } else {
           this.nativeSubtitles = data;
+          this.updateSubtitleOverlay();
           this.updateOptions();
           this.globals.toast(this.subtitleLabel);
         }
@@ -976,6 +1064,13 @@ export class PlayerVM extends VM {
     const video = this.video;
     if (type === 'loadedmetadata' || type === 'playing')
       this.refreshNativeSubtitles();
+    if (type === 'seeking') this.subtitleText = '';
+    if (type === 'seeked') {
+      this.subtitleCues = [];
+      this.pollSubtitleCues();
+    }
+    if (type === 'timeupdate' && this.nativeSubtitles?.renderer === 'app')
+      this.renderSubtitle();
     if (type === 'resize') this.applyFit();
     if (type === 'seeked') this.seekControl.update();
     if (type === 'loadedmetadata') {

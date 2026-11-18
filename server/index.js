@@ -94,7 +94,8 @@ function body(req) {
     req.on('end', function () { try { resolve(JSON.parse(data || '{}')); } catch (_) { reject(new Error('Некорректный JSON')); } }); req.on('error', reject);
   });
 }
-var webosSubtitles = require('./webos-subtitles').create();
+var subtitleText = require('./matroska-subtitles').create();
+var webosSubtitles = require('./webos-subtitles').create({textTracks:function(key){return subtitleText.tracks(key);}});
 var webosAudio = require('./webos-audio').create({directory:path.dirname(CONFIG)});
 webosAudio.ready.catch(function(e){console.error('Cannot restore LG audio:',e.message);});
 function publicConfig() { var out = Object.assign({}, config); delete out.torrserverPassword; delete out.jacredApiKey; delete out.filmixToken; delete out.filmixDeviceId; delete out.filmixWebHash; delete out.filmixWebAccessToken; delete out.filmixWebRefreshToken; out.webosAudio=webosAudio.supported; out.webosSubtitles=webosSubtitles.supported; out.hasFilmixToken=config.filmixTransport==='web'?!!config.filmixWebAccessToken:!!config.filmixToken; out.hasPassword = !!config.torrserverPassword; out.hasApiKey = !!config.jacredApiKey; return out; }
@@ -159,6 +160,11 @@ function stream(req, res, q) {
   var proxy = (u.protocol === 'https:' ? https : http).request(Object.assign({}, u, { method: req.method, headers: headers }), function (up) {
     var out = { 'Cache-Control': 'no-store' };
     ['content-type','content-length','content-range','accept-ranges'].forEach(function (h) { if (up.headers[h]) out[h] = up.headers[h]; });
+    if (req.method !== 'HEAD' && (up.statusCode === 200 || up.statusCode === 206)) {
+      var range=String(up.headers['content-range']||'').match(/^bytes (\d+)-/);
+      var inspector=subtitleText.tap(String(q.hash).toLowerCase()+':'+Number(q.index),range?Number(range[1]):0);
+      up.on('data',function(chunk){inspector.feed(chunk);});
+    }
     res.writeHead(up.statusCode, out); up.pipe(res);
     up.on('error', function () { res.destroy(); });
   });
@@ -198,6 +204,7 @@ var server = http.createServer(function (req, res) {
     if (route.indexOf('/download-media/') === 0 && ['GET','HEAD'].indexOf(req.method) >= 0) {
       var parts = route.split('/'); downloads.serve(req, res, parts[2], parts[3]); return null;
     }
+    if (route === '/api/subtitle-cues' && req.method === 'GET') {core.streamPath(q.hash,q.index,false);var time=Number(q.time);if(!isFinite(time)||time<0)throw new Error('Некорректная позиция субтитров');return subtitleText.cues(String(q.hash).toLowerCase()+':'+Number(q.index),Number(q.track),time);}
     if (route === '/api/subtitles' && req.method === 'GET') return webosSubtitles.read(q.mediaId);
     if (route === '/api/subtitles' && req.method === 'POST') return body(req).then(function(b){return webosSubtitles.select(b.mediaId,b.index);});
     if (route === '/api/audio-fix' && req.method === 'POST') return body(req).then(function(b){return webosAudio.set(b.mode,b.lease);});

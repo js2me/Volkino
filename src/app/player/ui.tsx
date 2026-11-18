@@ -21,6 +21,9 @@ export const Player = withViewModel(PlayerVM, ({ model }) => (
       tabIndex={-1}
       playsinline
     />
+    <div id="player-subtitle-text" aria-live="off">
+      {model.subtitleText}
+    </div>
     <div id="player-top" class={model.overlay ? '' : 'hidden'}>
       <div
         id="player-options"

@@ -14,7 +14,7 @@ function fixture(appId='org.torrenter.watcher') {
  return {api,calls,state};
 }
 test('LG reads embedded tracks even when DOM textTracks is empty, with unknown initial state',async()=>{
- const {api}=fixture(),r=await api.read('_movie');assert.deepEqual(r.tracks,[{index:0,label:'eng'},{index:2,label:'Дорожка 2'}]);assert.equal(r.enabled,null);
+ const {api}=fixture(),r=await api.read('_movie');assert.deepEqual(r.tracks,[{index:0,label:'eng',renderable:false},{index:2,label:'Дорожка 2',renderable:false}]);assert.equal(r.enabled,null);
 });
 test('LG uses text track type and enables, switches and disables native subtitles',async()=>{
  const {api,calls}=fixture();assert.equal((await api.select('_movie',0)).enabled,true);
@@ -29,4 +29,14 @@ test('LG rejects another app pipeline and absent or malformed tracks before muta
 test('LG verifies the applied native state instead of reporting ignored commands as successful',async()=>{
  const f=fixture();const api=subtitles.create({supported:true,call:async(method)=>method==='getPipelineState'?{data:JSON.stringify(f.state)}:{returnValue:true}});
  await assert.rejects(api.select('_movie',0),/не применил/);
+});
+
+test('text subtitles use app rendering while the native compositor remains disabled',async()=>{
+ const state={args:['http://127.0.0.1:32190/stream?hash='+'a'.repeat(40)+'&index=1',{option:{appId:'org.torrenter.watcher'}}],sourceInfo:{programInfo:[{subtitleTrackInfo:[{trackNum:0,language:'rus'}]}]}};
+ const calls=[];const api=subtitles.create({supported:true,textTracks:()=>[{label:'Русские',renderable:true}],call:async(method,payload)=>{
+ calls.push({method,payload});if(method==='getPipelineState')return {data:JSON.stringify(state)};
+ if(method==='setSubtitleEnable')state.setSubtitleEnable={enable:payload.enable};return {returnValue:true};}});
+ const selected=await api.select('_movie',0);assert.equal(selected.renderer,'app');assert.equal(selected.enabled,true);assert.equal(selected.selected,0);
+ assert.equal(state.setSubtitleEnable.enable,false);assert.ok(!calls.some(c=>c.method==='selectTrack'));
+ assert.equal((await api.select('_movie',-1)).enabled,false);
 });

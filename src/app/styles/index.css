@@ -1832,3 +1832,27 @@ aside > nav::-webkit-scrollbar-thumb {
   width: 100%;
   accent-color: var(--color-accent);
 }
+
+/* Render subtitle text as text, independently of the TV's HTML-unaware compositor. */
+#player-subtitle-text {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 10%;
+  z-index: 1;
+  pointer-events: none;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  font-size: 3.5vh;
+  font-weight: 500;
+  line-height: 1.28;
+  text-align: center;
+  white-space: pre-line;
+  word-wrap: break-word;
+  text-shadow:
+    -2px -2px 1px #000,
+    2px -2px 1px #000,
+    -2px 2px 1px #000,
+    2px 2px 1px #000,
+    0 3px 5px #000;
+}
