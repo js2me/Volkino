@@ -75,6 +75,7 @@ export class PlayerVM extends VM {
   private subtitleChoice: number | null = null;
   private returnFocus: HTMLElement | null = null;
   private seekControl!: ReturnType<typeof create>;
+  private timelineTimer?: ReturnType<typeof setInterval>;
   private overlayTimer?: ReturnType<typeof setTimeout>;
   private playerTimer?: ReturnType<typeof setTimeout>;
   private deadline?: ReturnType<typeof setTimeout>;
@@ -173,6 +174,7 @@ export class PlayerVM extends VM {
       this.listen(document, 'keyup', this.keyUp as EventListener);
       this.listen(window, 'blur', () => {
         this.enterHeld = false;
+        this.cancelDrag();
       });
       this.listen(document, 'volkino-pause', () => this.pauseAndSave());
       this.listen(document, 'visibilitychange', () => {
@@ -271,6 +273,7 @@ export class PlayerVM extends VM {
   }
   play(file: MediaFile, resume = 0, download?: DownloadItem) {
     if (!this.seekControl) return;
+    this.cancelDrag();
     this.stopSubtitleOverlay();
     this.subtitleChoice = null;
     this.nativeSubtitles = null;
@@ -596,6 +599,7 @@ export class PlayerVM extends VM {
     this.playing = null;
     this.episodesOpen = false;
     this.overlay = false;
+    this.stopTimelineTimer();
     this.visible = false;
     clearTimeout(this.overlayTimer);
     clearTimeout(this.playerTimer);
@@ -652,7 +656,23 @@ export class PlayerVM extends VM {
   showOverlay() {
     if (!this.playing) return;
     this.overlay = true;
+    this.syncTimeline();
+    if (!this.timelineTimer && !window.TWNativePlayer)
+      this.timelineTimer = setInterval(() => this.syncTimeline(), 500);
     this.armOverlay();
+  }
+  private syncTimeline() {
+    if (!this.playing || this.video.readyState < 1 || window.TWNativePlayer)
+      return;
+    this.renderPosition(
+      this.drag?.position ??
+        this.seekControl.target() ??
+        this.video.currentTime,
+    );
+  }
+  private stopTimelineTimer() {
+    clearInterval(this.timelineTimer);
+    this.timelineTimer = undefined;
   }
   private armOverlay() {
     clearTimeout(this.overlayTimer);
@@ -679,6 +699,7 @@ export class PlayerVM extends VM {
     }, 5000);
   }
   hideOverlay() {
+    this.stopTimelineTimer();
     clearTimeout(this.overlayTimer);
     this.overlayTimer = undefined;
     this.overlay = false;
@@ -696,6 +717,7 @@ export class PlayerVM extends VM {
   }
   openEpisodes() {
     if (!this.playing) return;
+    this.cancelDrag();
     this.closeOptions();
     this.saveHistory();
     const current = this.playing.file;
@@ -1072,7 +1094,10 @@ export class PlayerVM extends VM {
     if (type === 'timeupdate' && this.nativeSubtitles?.renderer === 'app')
       this.renderSubtitle();
     if (type === 'resize') this.applyFit();
-    if (type === 'seeked') this.seekControl.update();
+    if (type === 'seeked') {
+      this.seekControl.update();
+      this.syncTimeline();
+    }
     if (type === 'loadedmetadata') {
       this.updateOptions();
       if (this.resume > 0) {
@@ -1137,11 +1162,7 @@ export class PlayerVM extends VM {
     }
     if (type === 'timeupdate') {
       this.seekControl.update();
-      this.renderPosition(
-        this.drag
-          ? this.drag.position
-          : (this.seekControl.target() ?? video.currentTime),
-      );
+      this.syncTimeline();
       if (!this.overlayTimer) this.armOverlay();
       if (
         this.playing &&
