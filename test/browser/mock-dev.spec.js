@@ -128,3 +128,33 @@ test('saved watch states are visible in the file list and episode picker', async
   await expect(page.locator('.episode-watch-status')).toHaveText([...labels.slice(0, 3), /В процессе/]);
   await expect(page.locator('.episode-card[aria-current="true"]')).toContainText('Сейчас смотрите');
 });
+
+test('the episode strip reveals the entire focused card at either end', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/');
+  await page.locator('.poster-card').first().click();
+  await page.locator('.detail-torrents .torrent').first().click();
+  await page.locator('.file-card').last().click();
+  await expect(page.locator('#player')).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  const cards = page.locator('.episode-card');
+  async function expectVisibleCard(index) {
+    const card = cards.nth(index);
+    await expect(card).toBeFocused();
+    await expect.poll(() => card.evaluate(el => {
+      const bounds = el.getBoundingClientRect();
+      const strip = el.parentElement.getBoundingClientRect();
+      return bounds.left >= strip.left + 3 && bounds.right <= strip.right - 3;
+    })).toBe(true);
+  }
+  await expectVisibleCard(3);
+  await expect.poll(() => page.locator('#episode-list').evaluate(el => el.scrollLeft)).toBeGreaterThan(0);
+  for (let index = 2; index >= 0; index--) {
+    await page.keyboard.press('ArrowLeft');
+    await expectVisibleCard(index);
+  }
+  for (let index = 1; index <= 3; index++) {
+    await page.keyboard.press('ArrowRight');
+    await expectVisibleCard(index);
+  }
+});

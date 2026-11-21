@@ -740,9 +740,19 @@ export class PlayerVM extends VM {
       this.root?.querySelectorAll<HTMLElement>('.episode-card')[
         this.episodeIndex
       ];
-    card?.focus();
-    card?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    card?.focus({ preventScroll: true });
+    if (card) this.revealEpisode(card);
     this.showOverlay();
+  }
+  revealEpisode(card: HTMLElement) {
+    const list = card.parentElement;
+    if (!list) return;
+    // Leave room for the focus ring on both edges of the strip.
+    const inset =
+      list.clientLeft + parseFloat(getComputedStyle(list).paddingLeft);
+    const left = card.offsetLeft - inset;
+    const right = card.offsetLeft + card.offsetWidth + inset - list.clientWidth;
+    list.scrollLeft = Math.max(right, Math.min(left, list.scrollLeft));
   }
   selectEpisode(file: MediaFile) {
     if (file.id === this.playing?.file.id) this.closeEpisodes();

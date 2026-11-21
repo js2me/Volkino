@@ -1001,6 +1001,7 @@ h1.file-page-title {
   margin: 0 0 10px;
 }
 #episode-list {
+  position: relative;
   display: flex;
   overflow-x: auto;
   padding: 7px 5px 14px;

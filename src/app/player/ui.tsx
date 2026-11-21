@@ -181,8 +181,9 @@ export const Player = withViewModel(PlayerVM, ({ model }) => (
                   model.playing?.file.id === file.id ? 'true' : undefined
                 }
                 onClick={() => model.selectEpisode(file)}
-                onFocus={() => {
+                onFocus={(event) => {
                   model.episodeIndex = index();
+                  model.revealEpisode(event.currentTarget);
                   model.showOverlay();
                 }}
               >
