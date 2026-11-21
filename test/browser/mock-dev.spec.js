@@ -107,3 +107,24 @@ test('changing the home source saves it and reloads cached selections', async ({
   expect((await (await saved).json()).catalogProvider).toBe('vilkadb');
   await expect(page.locator('#toast')).toHaveText('Настройки сохранены');
 });
+
+test('saved watch states are visible in the file list and episode picker', async ({ page }) => {
+  await page.addInitScript(() => {
+    const hash = '0123456789abcdef0123456789abcdef01234567';
+    const entries = [95, 42].map((position, index) => ({
+      hash, fileId: index + 1, title: 'Серия ' + (index + 1),
+      link: 'magnet:?xt=urn:btih:' + hash, position, duration: 100,
+    }));
+    localStorage.setItem('tw-history', JSON.stringify(entries));
+  });
+  await page.goto('/');
+  await page.locator('.poster-card').first().click();
+  await page.locator('.detail-torrents .torrent').first().click();
+  const labels = ['✓ Просмотрено', 'В процессе · 42%', 'Не смотрели', 'Не смотрели'];
+  await expect(page.locator('.file-watch-status')).toHaveText(labels);
+  await page.locator('.file-card').last().click();
+  await expect.poll(() => page.locator('#video').evaluate(video => video.currentTime)).toBeGreaterThan(0.1);
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.episode-watch-status')).toHaveText([...labels.slice(0, 3), /В процессе/]);
+  await expect(page.locator('.episode-card[aria-current="true"]')).toContainText('Сейчас смотрите');
+});

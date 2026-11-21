@@ -189,6 +189,12 @@ export const Player = withViewModel(PlayerVM, ({ model }) => (
                 <span class="episode-name">
                   {file.path.replace(/\\/g, '/').split('/').pop()}
                 </span>
+                <span class="episode-watch-status">
+                  {model.globals.fileWatchLabel(
+                    file,
+                    model.playing?.file.id === file.id,
+                  )}
+                </span>
                 <span class="episode-meta">
                   {model.playing?.file.id === file.id
                     ? 'Сейчас смотрите'
@@ -196,17 +202,7 @@ export const Player = withViewModel(PlayerVM, ({ model }) => (
                       ? file.voice
                       : model.globals.bytes(file.length)}
                 </span>
-                <span
-                  class="file-watch-track"
-                  role="img"
-                  aria-label={
-                    model.globals.fileProgress(file) >= 100
-                      ? 'Просмотрено'
-                      : 'Просмотрено ' +
-                        Math.floor(model.globals.fileProgress(file)) +
-                        '%'
-                  }
-                >
+                <span class="file-watch-track" aria-hidden="true">
                   <span
                     class="file-watch-fill"
                     data-file-id={file.id}

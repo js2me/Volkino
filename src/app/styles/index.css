@@ -1036,9 +1036,19 @@ h1.file-page-title {
   overflow: hidden;
   word-wrap: break-word;
 }
-.episode-meta {
+.episode-watch-status {
   display: block;
   margin-top: 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.file-watch-status {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.episode-meta {
+  display: block;
+  margin-top: 4px;
   font-size: 15px;
   color: var(--color-text-secondary);
 }

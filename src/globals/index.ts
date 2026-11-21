@@ -322,6 +322,15 @@ export class Globals {
   fileProgress(file: MediaFile) {
     return watchHistory.progress(this.watchedFile(file));
   }
+  fileWatchLabel(file: MediaFile, current = false) {
+    const item = this.watchedFile(file);
+    const percent = watchHistory.progress(item);
+    if (percent === 100) return '✓ Просмотрено';
+    if (percent > 0)
+      return 'В процессе · ' + (percent < 1 ? '<1' : Math.floor(percent)) + '%';
+    if (item && item.position > 0) return 'В процессе';
+    return current ? 'Начало просмотра' : 'Не смотрели';
+  }
   search() {
     this.searchFromDetail = false;
     this.change('search');

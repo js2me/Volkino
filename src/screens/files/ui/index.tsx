@@ -150,6 +150,9 @@ export const Files = withViewModel(FilesVM, ({ model }) => {
                 <span class="torrent-body">
                   <span class="torrent-title">{file.path}</span>
                   <span class="torrent-meta">
+                    <span class="file-watch-status">
+                      {model.globals.fileWatchLabel(file)}
+                    </span>
                     <span>
                       {model.globals.source === 'filmix'
                         ? file.voice + ' · ' + file.qualities?.join(' / ') + 'p'
@@ -158,17 +161,7 @@ export const Files = withViewModel(FilesVM, ({ model }) => {
                   </span>
                 </span>
                 <span class="torrent-arrow">→</span>
-                <span
-                  class="file-watch-track"
-                  role="img"
-                  aria-label={
-                    model.globals.fileProgress(file) >= 100
-                      ? 'Просмотрено'
-                      : 'Просмотрено ' +
-                        Math.floor(model.globals.fileProgress(file)) +
-                        '%'
-                  }
-                >
+                <span class="file-watch-track" aria-hidden="true">
                   <span
                     class="file-watch-fill"
                     data-file-id={file.id}
