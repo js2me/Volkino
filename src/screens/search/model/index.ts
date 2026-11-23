@@ -9,6 +9,8 @@ import type { ViewModelParams } from 'mobx-view-model';
 import { VM } from '../../../shared/lib/mobx';
 import type { SearchResult } from '../../../shared/types/screens';
 
+import type { FilmixResult } from '../../../app/services/types';
+
 export class SearchVM extends VM {
   query: string;
   results: SearchResult[];
@@ -17,6 +19,9 @@ export class SearchVM extends VM {
   searched: boolean;
   status = '';
   error = '';
+  suggestions: string[] = [];
+  private suggestionTimer?: ReturnType<typeof setTimeout>;
+  private suggestionRequest = 0;
   private request = 0;
   protected didMount() {
     this.afterRender((root) =>
@@ -51,6 +56,8 @@ export class SearchVM extends VM {
       status: observable,
       error: observable,
       sorted: computed,
+      suggestions: observable.ref,
+      dismissSuggestions: action,
       setQuery: action,
       setSort: action,
       search: action,
@@ -68,18 +75,44 @@ export class SearchVM extends VM {
   }
   setQuery(query: string) {
     this.query = query;
+    this.dismissSuggestions();
+    const term = query.trim();
+    if (term.length < 2) return;
+    const request = this.suggestionRequest;
+    this.suggestionTimer = setTimeout(() => {
+      this.globals.api<{ results: FilmixResult[] }>(
+        'filmix/search?q=' + encodeURIComponent(term),
+        null,
+        (error, data) => {
+          if (error || request !== this.suggestionRequest) return;
+          const titles = data.results
+            .map((item) => item.title.trim())
+            .filter(Boolean);
+          runInAction(() => {
+            this.suggestions = Array.from(new Set(titles)).slice(0, 5);
+          });
+        },
+      );
+    }, 300);
+  }
+  dismissSuggestions() {
+    clearTimeout(this.suggestionTimer);
+    this.suggestionRequest++;
+    this.suggestions = [];
   }
   setSort(sort: string) {
     this.sort = sort;
     this.globals.state.sort = sort;
   }
   search(query = this.query) {
+    this.dismissSuggestions();
     this.query = query.trim();
     if (this.query.length < 2) {
       this.globals.toast('Введите хотя бы два символа');
       return;
     }
     const request = ++this.request;
+    const submittedQuery = this.query;
     this.loading = true;
     this.searched = true;
     this.error = '';
@@ -108,7 +141,7 @@ export class SearchVM extends VM {
             results: this.results,
             searchStatus: { text: this.status, error: !!error },
           });
-          this.restoreFocus();
+          if (submittedQuery === this.query) this.restoreFocus();
         });
       },
     );
@@ -118,6 +151,7 @@ export class SearchVM extends VM {
     this.globals.filmixSearch(this.query.trim());
   }
   protected willUnmount() {
+    this.dismissSuggestions();
     this.request++;
     if (this.loading) this.globals.state.searchStatus = null;
   }

@@ -13,30 +13,73 @@ export const Search = withViewModel(SearchVM, () => {
       }}
       class="search-screen"
     >
-      <form
-        class="search-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          model.search();
+      <div
+        onFocusOut={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            model.dismissSuggestions();
+        }}
+        onKeyDown={(event) => {
+          if (!model.suggestions.length) return;
+          const input =
+            event.currentTarget.querySelector<HTMLInputElement>('#query');
+          if (event.keyCode === 40 && event.target === input) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget
+              .querySelector<HTMLButtonElement>('.search-suggestions button')
+              ?.focus();
+          } else if (event.keyCode === 27 || event.keyCode === 461) {
+            event.preventDefault();
+            event.stopPropagation();
+            input?.focus();
+            model.dismissSuggestions();
+          }
         }}
       >
-        <input
-          id="query"
-          class="input"
-          placeholder="Название фильма или сериала"
-          value={model.query}
-          maxLength={160}
-          autocomplete="off"
-          aria-label="Название фильма или сериала"
-          onInput={(event) => model.setQuery(event.currentTarget.value)}
-        />
-        <button class="btn primary" type="submit">
-          Найти →
-        </button>
-        <button class="btn" type="button" onClick={() => model.filmix()}>
-          Filmix
-        </button>
-      </form>
+        <form
+          class="search-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            model.search();
+          }}
+        >
+          <input
+            id="query"
+            class="input"
+            placeholder="Название фильма или сериала"
+            value={model.query}
+            maxLength={160}
+            autocomplete="off"
+            aria-label="Название фильма или сериала"
+            onInput={(event) => model.setQuery(event.currentTarget.value)}
+          />
+          <button class="btn primary" type="submit">
+            Найти →
+          </button>
+          <button class="btn" type="button" onClick={() => model.filmix()}>
+            Filmix
+          </button>
+        </form>
+        <Show when={model.suggestions.length}>
+          <div
+            class="search-suggestions"
+            role="group"
+            aria-label="Подсказки поиска"
+          >
+            <For each={model.suggestions}>
+              {(title) => (
+                <button
+                  class="btn"
+                  type="button"
+                  onClick={() => model.search(title)}
+                >
+                  {title}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
       <div class="muted">
         Поиск раздач · VilkaDB / Rutor / Torznab / Jacred · Воспроизведение
         через ваш TorrServer

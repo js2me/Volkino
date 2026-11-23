@@ -202,6 +202,17 @@ p {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 4px var(--color-focus-ring);
 }
+.search-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  margin: -8px 0 16px;
+}
+.search-suggestions .btn {
+  margin: 0 12px 12px 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
 .search-form .input {
   flex: 1;
 }

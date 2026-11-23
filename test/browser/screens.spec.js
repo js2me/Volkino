@@ -84,3 +84,31 @@ test('history resumes saved entries and clearing history updates the home screen
   await page.locator('#nav-home').click();
   await expect(page.locator('.continue-card')).toHaveCount(0);
 });
+
+test('typing suggests titles and OK searches torrents for the chosen title', async ({ page }) => {
+  let pending;
+  await page.route('**/api/filmix/search?**', route => {
+    if (new URL(route.request().url()).searchParams.get('q') === 'иг') {
+      pending = route;
+      return;
+    }
+    return route.fulfill({json: {results: [{title: 'Игра престолов'}, {title: 'Игра престолов'}]}});
+  });
+  await open(page);
+  await page.locator('#nav-search').click();
+  const input = page.locator('#query');
+  await input.fill('иг');
+  await expect.poll(() => !!pending).toBe(true);
+  await input.fill('игра пр');
+  const buttons = page.getByRole('group', {name: 'Подсказки поиска'}).getByRole('button');
+  await expect(buttons).toHaveText(['Игра престолов']);
+  await pending.fulfill({json: {results: [{title: 'Игрок'}]}});
+  await expect(input).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(buttons.first()).toBeFocused();
+  const search = page.waitForRequest(req => new URL(req.url()).pathname === '/api/search');
+  await page.keyboard.press('Enter');
+  expect(new URL((await search).url()).searchParams.get('q')).toBe('Игра престолов');
+  await expect(input).toHaveValue('Игра престолов');
+  await expect(buttons).toHaveCount(0);
+});
